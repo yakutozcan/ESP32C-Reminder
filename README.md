@@ -187,8 +187,9 @@ masaüstü zamanlayıcısını veya cihaz bağlantısını çalıştırmaz.
   görevin yapıldığını veya buzzerdan ses çıktığını doğrulamaz.
 - Cihazda kabul edilmiş notlar masaüstünden silinince geri çekilmez. Görüntüleme
   sırasında cihaz yeniden başlarsa mevcut not tekrar gösterilebilir.
-- OLED’de Türkçe harfler Latin karşılıklarına dönüştürülür; desteklenmeyen
-  karakterler `?` olarak görünür. Uzun notlar üç satırlık sayfalara bölünür.
+- OLED’de **ç, ğ, ı, İ, ö, ş, ü** ve büyük harfleri korunur. UTF-8 metinler
+  karakter sınırlarında, 12 karakter × 3 satırlık sayfalara bölünür. Yazı tipinde
+  bulunmayan karakterler `?` olarak gösterilir.
 - BOOT’a kısa basmak mevcut bildirimi kapatır. **Bilgisayar açıldığında başlat**
   ayarı paketlenmiş uygulamada kullanılabilir; macOS onay isterse Giriş Öğeleri’ni kontrol et.
 
@@ -237,11 +238,16 @@ Seri monitör komutları:
 ```sh
 npm test
 pio run -d firmware
+python3 tools/test-oled-text.py
 ```
 
-GitHub Actions bu iki kontrolü çalıştırır. Testler takvim sınırlarını, yaz/kış saati
+GitHub Actions uygulama testlerini, firmware derlemesini ve OLED metin testini
+çalıştırır. Testler takvim sınırlarını, yaz/kış saati
 geçişlerini, kuyruk kalıcılığını, yeniden denemeleri, disk hatalarını ve gerçek HTTP
-üzerinden protokolü doğrular. Fiziksel ekran ve ses için ayrıca cihaz testi gerekir.
+üzerinden protokolü doğrular. OLED testi Türkçe harflerin gerçek yazı tipiyle farklı
+çizildiğini, 72×40 alana
+sığdığını ve UTF-8 satır/sayfa sınırlarının güvenli olduğunu doğrular. Yerel OLED
+testi için C/C++ derleyicisi gerekir. Fiziksel ekran ve ses için ayrıca cihaz testi gerekir.
 
 Firmware bağımlılıkları sabitlenmiştir: ESP32 platformu **6.9.0**,
 ArduinoJson **6.21.5**, U8g2 **2.36.15**, AyresWiFiManager **2.3.0**.
@@ -261,7 +267,7 @@ docs/              Donanım bağlantısı, protokol ve ekran görüntüsü
 
 ## Önceki sürümlerden geçiş
 
-Masa **0.2.0** ve firmware **0.2.2**, önceki titreşim tercihlerini melodi/sessiz
+Masa **0.2.0** ve firmware **0.2.3**, önceki titreşim tercihlerini melodi/sessiz
 tercihlerine dönüştürür. Takvimler ve bekleyen teslimat kimlikleri korunur. Eski
 masaüstü kaydı dönüşümden önce `reminder-state-v1-backup` anahtarına yedeklenir.
 Eski uygulamaya dönmek gerekirse Masa’dan çıkıp yedeği `reminder-state` alanına

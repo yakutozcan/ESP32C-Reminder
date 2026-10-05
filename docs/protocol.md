@@ -11,7 +11,7 @@ HTTP is unencrypted; this protocol is for a trusted local network.
 `GET /api/health`
 
 ```json
-{"protocol":2,"name":"Masa ESP32-C3","firmware":"0.2.2","pending":0,"ip":"192.168.1.50","rssi":-50}
+{"protocol":2,"name":"Masa ESP32-C3","firmware":"0.2.3","pending":0,"ip":"192.168.1.50","rssi":-50}
 ```
 
 `pending` includes the currently displayed notification. A health response is
@@ -110,3 +110,12 @@ Ayres' scan JSON capacity is increased and reconnection accepts open Wi-Fi netwo
 The build uses patched copies; installed dependencies are never edited. Unexpected
 upstream changes fail the build and must be reviewed before updating version pins.
 HTTP, local filesystem and NVS contents are unencrypted; keep the device key private.
+
+## OLED text
+
+Firmware 0.2.3 retains original UTF-8 notification titles in NVS. The 6×12
+Latin Extended font includes `ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü`; rendering uses `drawUTF8`.
+Rows contain 12 Unicode characters and pages contain 36, regardless of byte length.
+Unsupported glyphs are replaced with `?` only during rendering. Older queue entries
+remain readable; already transliterated titles cannot recover their lost accents.
+USB `TEST` displays all twelve Turkish glyphs. `INFO` reports font coverage.

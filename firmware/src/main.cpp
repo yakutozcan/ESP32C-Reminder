@@ -15,6 +15,7 @@
 #include <freertos/task.h>
 #include <deque>
 #include "setup_page.h"
+#include "oled_text.h"
 #if __has_include("config.h")
 #include "config.h"
 #else
@@ -121,18 +122,6 @@ bool readMelody(JsonObject obj, bool& chime, bool allowLegacy = false) {
   return false;
 }
 
-String displayText(String text) {
-  const char* from[] = {"ç", "Ç", "ğ", "Ğ", "ı", "İ", "ö", "Ö", "ş", "Ş", "ü", "Ü"};
-  const char* to[] = {"c", "C", "g", "G", "i", "I", "o", "O", "s", "S", "u", "U"};
-  for (size_t i = 0; i < 12; i++) text.replace(from[i], to[i]);
-  String ascii;
-  for (size_t i = 0; i < text.length(); i++) {
-    unsigned char c = text[i];
-    if (c >= 32 && c <= 126) ascii += char(c);
-    else if ((c & 0xC0) != 0x80) ascii += '?';
-  }
-  return ascii;
-}
 bool saveQueue() {
   if (!storageReady) return false;
   DynamicJsonDocument doc(16384);
@@ -183,7 +172,7 @@ void health() {
   if (!authorize()) return;
   if (!queueHealthy) { reply(503, "Persistent queue is corrupt; inspect serial monitor"); return; }
   DynamicJsonDocument doc(1024);
-  doc["protocol"] = 2; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.2.2";
+  doc["protocol"] = 2; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.2.3";
   doc["sound"] = soundCommands ? "passive-buzzer" : "unavailable";
   doc["oledI2c"] = oledPresent;
   doc["pending"] = queue.size(); doc["ip"] = WiFi.localIP().toString(); doc["rssi"] = WiFi.RSSI();
@@ -209,7 +198,7 @@ void notify() {
   for (const auto& old : queue) if (old.id == id) duplicate = true;
   if (!duplicate) {
     if (queue.size() >= QUEUE_LIMIT) { reply(429, "Queue full"); return; }
-    queue.push_back({id, displayText(title), chime});
+    queue.push_back({id, title, chime});
     if (!saveQueue()) { queue.pop_back(); reply(507, "Queue could not be persisted"); return; }
   }
   DynamicJsonDocument ack(512);
@@ -218,13 +207,23 @@ void notify() {
 }
 void drawLines(const String& text, size_t page) {
   oled.clearBuffer();
-  oled.setFont(u8g2_font_6x10_tf);
-  // 12 characters x 3 lines; clipping confines drawing to the visible window.
+  oled.setFont(MASA_OLED_FONT); // Latin Extended includes all Turkish letters.
+  // Count Unicode characters, never cut a UTF-8 sequence at a row/page boundary.
   oled.setClipWindow(OLED_X_OFFSET, OLED_Y_OFFSET, OLED_X_OFFSET + 72, OLED_Y_OFFSET + 40);
-  for (size_t line = 0; line < 3; line++) {
-    const size_t offset = page * 36 + line * 12;
+  for (size_t line = 0; line < masa::OLED_ROWS; line++) {
+    const size_t position = page * masa::OLED_PAGE_CHARACTERS + line * masa::OLED_COLUMNS;
+    size_t offset = masa::characterOffset(text.c_str(), text.length(), position);
     if (offset >= text.length()) break;
-    oled.drawStr(OLED_X_OFFSET, OLED_Y_OFFSET + 10 + line * 11, text.substring(offset, offset + 12).c_str());
+    String row;
+    for (size_t column = 0; column < masa::OLED_COLUMNS && offset < text.length(); ++column) {
+      const auto character = masa::nextCharacter(text.c_str() + offset, text.length() - offset);
+      if (character.codepoint >= 32 && character.codepoint <= 0xFFFF &&
+          character.codepoint != 0xFFFD && u8g2_IsGlyph(oled.getU8g2(), character.codepoint))
+        row.concat(text.c_str() + offset, character.bytes);
+      else row += '?';
+      offset += character.bytes;
+    }
+    oled.drawUTF8(OLED_X_OFFSET, OLED_Y_OFFSET + 11 + line * 13, row.c_str());
   }
   oled.sendBuffer();
 }
@@ -235,9 +234,14 @@ String randomKey() {
   return String(key);
 }
 void printStatus() {
-  Serial.println("Masa firmware 0.2.2 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
+  Serial.println("Masa firmware 0.2.3 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
   Serial.println("Sound task: " + String(soundCommands ? "ready" : "unavailable"));
   Serial.println("OLED I2C: " + String(oledPresent ? "detected at 0x3C" : "not detected"));
+  oled.setFont(MASA_OLED_FONT);
+  const uint16_t turkish[] = {0xC7, 0xE7, 0x11E, 0x11F, 0x130, 0x131, 0xD6, 0xF6, 0x15E, 0x15F, 0xDC, 0xFC};
+  size_t glyphs = 0;
+  for (auto codepoint : turkish) glyphs += u8g2_IsGlyph(oled.getU8g2(), codepoint) != 0;
+  Serial.println("OLED UTF-8 Turkish glyphs: " + String(glyphs) + "/12");
   if (setupMode) {
     Serial.println("Setup Wi-Fi: " + setupSsid);
     Serial.println("Setup auth: open (no password)");
@@ -320,7 +324,7 @@ void handleSerial() {
       else if (command == "TEST") {
         if (queue.size() < QUEUE_LIMIT && queueHealthy) {
           const String id = "usb-test-" + randomKey();
-          queue.push_back({id, "Masa hazir. Kisa melodi testi.", true});
+          queue.push_back({id, "Çç Ğğ İı Öö Şş Üü Türkçe testi", true});
           if (saveQueue()) Serial.println("USB test queued: " + id);
           else { queue.pop_back(); Serial.println("USB test storage failed"); }
         } else Serial.println("USB test queue unavailable");
@@ -424,16 +428,16 @@ void loop() {
   if (active) {
     const auto& notice = queue.front();
     const uint32_t elapsed = now - activeSince;
-    const size_t pages = max(size_t(1), (notice.title.length() + 35) / 36);
+    const size_t pages = masa::pageCount(notice.title.c_str(), notice.title.length());
     if (!lastDraw || now - lastDraw >= 200) { drawLines(notice.title, (elapsed / 3500) % pages); lastDraw = now; }
     if (elapsed >= max(uint32_t(10000), uint32_t(pages * 3500))) finishNotice();
   } else if (!lastDraw || now - lastDraw >= 1000) {
     if (setupMode) {
       String label = setupSsid;
       while (label.length() < 12) label += ' ';
-      drawLines((now / 5000) % 2 == 0 ? label + "Sifresiz    Wi-Fi kur" : "Tarayici:   192.168.4.1 Wi-Fi sec", 0);
+      drawLines((now / 5000) % 2 == 0 ? label + "Şifresiz    Wi-Fi kur" : "Tarayıcı:   192.168.4.1 Wi-Fi seç", 0);
     }
-    else drawLines(!queueHealthy ? "Depo hatasi Seri monitor kontrol et" : WiFi.status() == WL_CONNECTED ? "Masa hazir  Notlarin    bekleniyor" : "Masa        Wi-Fi       bekleniyor", 0);
+    else drawLines(!queueHealthy ? "Depo hatası Seri monitör kontrol et" : WiFi.status() == WL_CONNECTED ? "Masa hazır  Notların    bekleniyor" : "Masa        Wi-Fi       bekleniyor", 0);
     lastDraw = now;
   }
   const int button = digitalRead(ACK_BUTTON_PIN);

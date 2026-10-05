@@ -56,16 +56,20 @@ basmak sesi kesip bildirimi kapatır. Sessiz seçenekte yalnızca ekran çalış
 Aktif buzzer kendi sabit tonunu üretir; bu melodi için pasif buzzer gerekir.
 
 U8g2 SSD1306 128×64 tamponu `(30,12)` başlangıcında 72×40 pencereye kırpılır.
-SDA=5, SCL=6, I²C=0x3C. 6×10 yazıyla 12 karakter × 3 satır gösterilir;
-sayfalar 3,5 saniyede değişir, bir bildirim en az 10 saniye görünür.
+SDA=5, SCL=6, I²C=0x3C. Türkçe harfleri içeren `u8g2_font_6x12_te` yazı tipiyle 12 karakter × 3 satır gösterilir;
+sayfalar 3,5 saniyede değişir, bir bildirim en az 10 saniye görünür. Metinler UTF-8
+olarak çizilir; `ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü` korunur. Satır ve sayfa sınırları bayt
+sayısına göre bölünmez. Yazı tipinde olmayan karakterler yalnızca görüntülemede
+`?` olur; orijinal başlık cihaz kuyruğunda korunur.
 
 ## İlk doğrulama
 
-1. Buzzerı bağlamadan yazılımı yükle; [Wi-Fi kurulumunu](../README.md#esp32yi-hazırla) tamamla.
+1. Buzzerı bağlamadan yazılımı yükle; [Wi-Fi kurulumunu](../README.md#kurulum) tamamla.
 2. Masa’dan sessiz bir hatırlatıcı gönder; ekrandaki yazıyı kontrol et.
 3. Gücü kes; MOSFET, dirençler, gerekliyse diyot, buzzer ve ortak GND’yi bağla.
 4. Güç ver; Masa’daki **Test bildirimi** dört notayı çalar ve test metnini gösterir.
-5. Seri monitörde `INFO` cihaz durumunu, `TEST` USB üzerinden aynı melodili testi başlatır.
+5. Seri monitörde `INFO` cihaz durumunu, `TEST` USB üzerinden Türkçe harfleri içeren melodili testi başlatır;
+   `Çç Ğğ İı Öö Şş Üü Türkçe testi` metnini kontrol et.
 
 USB’ye bağlı ESP32-C3 üzerinde yükleme ve çalışma günlüğü doğrulanabilir;
 I²C adresinin yanıt vermesi ekrandaki görüntüyü, PWM görevinin tamamlanması ise

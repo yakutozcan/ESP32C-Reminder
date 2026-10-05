@@ -20,3 +20,4 @@ jobs:
           python-version: '3.12'
       - run: pip install platformio==6.1.19
       - run: pio run -d firmware
+      - run: python3 tools/test-oled-text.py
