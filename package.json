@@ -1,0 +1,14 @@
+{
+  "name": "esp32c-reminder",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tinyjs dev",
+    "build": "tinyjs build",
+    "test": "node --test tests/*.test.js",
+    "simulator": "node tools/device-simulator.js",
+    "preview": "node tools/preview.js"
+  },
+  "engines": { "node": ">=22" }
+}

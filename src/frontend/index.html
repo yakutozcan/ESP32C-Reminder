@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
+  <title>Masa — Hatırlatıcı</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="wordmark" href="#">masa<span class="brand-dot">.</span></a>
+      <p class="tagline">Aklında kalmasın.<br>Masanda dursun.</p>
+      <nav aria-label="Ajanda">
+        <button class="nav-item active" data-view="all" aria-current="page"><span>Ajandam</span><span id="nav-count">0</span></button>
+        <button class="nav-item" data-view="today">Bugün</button>
+        <button class="nav-item" data-view="history">Bildirim geçmişi</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button class="device-link" id="open-device"><span class="status-dot"></span><span><strong>ESP32-C3 OLED</strong><small id="sidebar-status">Bağlantı ayarlanmadı</small></span><span aria-hidden="true">↗</span></button>
+        <p>Yerel çalışır. Sana ait.</p>
+      </div>
+    </aside>
+    <main>
+      <header class="page-header"><p id="today-label">Ajandan yükleniyor</p><button class="primary" id="add-reminder"><span aria-hidden="true">＋</span> Yeni hatırlatıcı</button></header>
+      <section class="intro"><h1 id="page-title">Günün küçük notları.</h1><p id="page-description">Rutinlerini bir kez yaz. Zamanı gelince masan hatırlatsın.</p></section>
+      <section class="week-strip" aria-label="Önümüzdeki yedi gün" id="week-strip"></section>
+      <section class="agenda" aria-labelledby="list-heading">
+        <div class="list-heading"><h2 id="list-heading">Hatırlatıcılar</h2><p id="summary">Yükleniyor…</p></div>
+        <div id="filters" class="filters" aria-label="Tekrar sıklığı">
+          <button data-filter="all" aria-pressed="true">Tümü</button><button data-filter="daily" aria-pressed="false">Günlük</button><button data-filter="weekly" aria-pressed="false">Haftalık</button><button data-filter="monthly" aria-pressed="false">Aylık</button>
+        </div>
+        <div id="reminders" aria-busy="true"><p class="loading">Hatırlatıcılar yükleniyor…</p></div>
+      </section>
+      <footer><span id="footer-status">Uygulama açıkken hatırlatır.</span><span id="zone-label"></span></footer>
+    </main>
+  </div>
+  <dialog id="reminder-dialog" aria-labelledby="reminder-heading">
+    <form id="reminder-form" aria-describedby="reminder-error">
+      <div class="dialog-heading"><h2 id="reminder-heading">Bir not bırak.</h2><button type="button" class="icon-button close-dialog" aria-label="Pencereyi kapat">×</button></div>
+      <p>Yapılacak işi ve tekrarını seç.</p>
+      <input type="hidden" name="id">
+      <label>Ne hatırlatalım?<input name="title" required maxlength="80" placeholder="Örneğin, bitkileri sula" autocomplete="off"></label>
+      <div class="form-row"><label>Tekrar<select name="frequency"><option value="daily">Her gün</option><option value="weekly">Her hafta</option><option value="monthly">Her ay</option></select></label><label>Saat<input type="time" name="time" required value="09:00"></label></div>
+      <fieldset id="weekday-field" hidden><legend>Hangi günler?</legend><div class="weekday-picker"><label><input type="checkbox" value="1">Pzt</label><label><input type="checkbox" value="2">Sal</label><label><input type="checkbox" value="3">Çar</label><label><input type="checkbox" value="4">Per</label><label><input type="checkbox" value="5">Cum</label><label><input type="checkbox" value="6">Cmt</label><label><input type="checkbox" value="0">Paz</label></div></fieldset>
+      <label id="monthday-field" hidden>Ayın günü<input name="monthDay" type="number" min="1" max="31" value="1"><small>Seçtiğin gün o ayda yoksa ayın son günü hatırlatılır.</small></label>
+      <label>Bildirim sesi<select name="melody"><option value="chime" selected>Kısa melodi · yaklaşık 1 saniye</option><option value="none">Sessiz · yalnızca ekran</option></select></label>
+      <p class="form-note">Bilgisayarın yerel saatine göre. Pencere kapansa da Masa çalışmaya devam eder.</p>
+      <p class="form-error" id="reminder-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="close-dialog">Vazgeç</button><button class="primary" type="submit">Hatırlatıcıyı kaydet</button></div>
+    </form>
+  </dialog>
+  <dialog id="device-dialog" aria-labelledby="device-heading">
+    <form id="device-form" aria-describedby="device-error">
+      <div class="dialog-heading"><h2 id="device-heading">Masandaki cihaz.</h2><button type="button" class="icon-button close-dialog" aria-label="Pencereyi kapat">×</button></div>
+      <p>ESP32 ile bilgisayar aynı Wi-Fi ağına bağlı olmalı.</p>
+      <label>Cihaz adresi<input name="url" type="url" placeholder="http://192.168.1.50" autocomplete="off"><small>Adresi cihazın seri monitöründen öğrenebilirsin.</small></label>
+      <label>Cihaz anahtarı<input name="token" type="password" minlength="24" maxlength="64" autocomplete="off" spellcheck="false"><small>Cihazın ilk kurulum ekranındaki anahtarı buraya yapıştır.</small></label>
+      <p class="device-result" id="device-result" role="status">Bağlantı henüz kontrol edilmedi.</p>
+      <div class="device-actions"><button type="button" id="check-device">Bağlantıyı kontrol et</button><button type="button" id="test-device">Test bildirimi</button></div>
+      <label class="check-label"><input id="login-toggle" type="checkbox"> Bilgisayar açıldığında başlat</label><small id="login-help">Paketlenmiş uygulamada desteklenir.</small>
+      <p class="form-error" id="device-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="close-dialog">Kapat</button><button class="primary" type="submit">Bağlantıyı kaydet</button></div>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" hidden><span></span><button hidden>Geri al</button><button class="dismiss-toast" aria-label="Mesajı kapat">×</button></div>
+</body>
+</html>
