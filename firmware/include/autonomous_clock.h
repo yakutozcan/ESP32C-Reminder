@@ -2,10 +2,12 @@
 #include <stdint.h>
 #include <ctime>
 #include <algorithm>
+#include "cron_schedule.h"
 namespace masa {
 constexpr int64_t DAY_MS = 86400000;
 struct Recurrence {
-  enum Kind { Once, Daily, Weekly, Monthly, Interval } kind = Daily;
+  enum Kind { Once, Daily, Weekly, Monthly, Interval, Cron } kind = Daily;
+  CronRule cron;
   int minute = 0, monthDay = 1, intervalMinutes = 60, weekInterval = 1;
   unsigned weekdays = 127;
   int workStart = -1, workEnd = -1;
@@ -47,6 +49,7 @@ inline bool allowed(const Recurrence& r, tm date) {
   return weeks % r.weekInterval == 0;
 }
 inline int64_t nextAfter(const Recurrence& r, int64_t after) {
+  if (r.kind == Recurrence::Cron) return nextCron(r.cron,after);
   if (r.kind == Recurrence::Once) return r.scheduledAt > after ? r.scheduledAt : 0;
   if (r.kind == Recurrence::Interval && r.workStart < 0) {
     const int64_t step = int64_t(r.intervalMinutes)*60000;
@@ -82,6 +85,7 @@ inline int64_t nextAfter(const Recurrence& r, int64_t after) {
 }
 inline int64_t latestDue(const Recurrence& r,int64_t first,int64_t now) {
   if (!first || first>now) return 0;
+  if(r.kind==Recurrence::Cron) return latestCron(r.cron,first,now);
   if(r.kind==Recurrence::Once) return first>now-DAY_MS?first:0;
   int64_t due=nextAfter(r,std::max(first-1,now-DAY_MS)), latest=0;
   for(int i=0;due && due<=now && i<1441;++i) {latest=due;due=nextAfter(r,due);}

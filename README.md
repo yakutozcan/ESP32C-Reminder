@@ -7,7 +7,7 @@
 [![Desktop: tinyjsapp](https://img.shields.io/badge/Desktop-tinyjsapp-28543b.svg)](https://github.com/tarwin/tinyjsapp)
 [![Device: ESP32-C3](https://img.shields.io/badge/Device-ESP32--C3-28543b.svg)](firmware/)
 
-Masa; tek seferlik, günlük, haftalık, aylık ve aralıklı işlerini hatırlatan, açık kaynak bir masaüstü
+Masa; tek seferlik, günlük, haftalık, aylık, aralıklı ve cron kurallı işlerini hatırlatan, açık kaynak bir masaüstü
 uygulaması ve ESP32-C3 cihaz yazılımıdır. Hatırlatma zamanı geldiğinde aynı Wi-Fi
 ağı üzerindeki cihazın OLED ekranında yapılacak işi gösterir ve **5 V pasif buzzer**
 ile kısa bir melodi çalar. Her hatırlatıcı için sessiz bildirim de seçilebilir.
@@ -15,7 +15,7 @@ ile kısa bir melodi çalar. Her hatırlatıcı için sessiz bildirim de seçile
 Masaüstü uygulaması [tinyjsapp](https://github.com/tarwin/tinyjsapp), cihazın Wi-Fi
 kurulumu [AyresWiFiManager](https://registry.platformio.org/libraries/ayresnet/AyresWiFiManager)
 kullanır. Takvim ve veriler bilgisayarında saklanır; ayrı bir sunucu veya bulut
-hesabı gerekmez. **Masa 0.6.0 / firmware 0.6.0** ile takvimi cihaza aktarıp
+hesabı gerekmez. **Masa 0.7.0 / firmware 0.7.0** ile takvimi cihaza aktarıp
 bilgisayar kapalıyken de hatırlatmasını sağlayabilirsin.
 
 ![Masa ajandası: günlük, haftalık ve aylık örnek hatırlatıcılar](docs/images/masa-agenda.jpg)
@@ -27,7 +27,9 @@ bağlantı durumu temsilidir; kişisel veriler içermez.*
 
 ## Özellikler
 
-- Günlük tekrar, haftanın birden fazla günü veya ayın belirli günü.
+- **Her gün, Her saat, Her 2 saatte** hazır seçenekleri; haftanın birden fazla günü veya ayın belirli günü.
+- Beş alanlı **cron** ifadeleri, hazır örnekler ve sonraki üç hatırlatmanın önizlemesi.
+  Cron zamanlaması bilgisayarda ve firmware 0.7.0+ ile bağımsız cihazda çalışır.
 - Başlangıç haftası seçerek iki haftada bir tekrar; 1–10080 dakika aralıklarla,
   seçili günlerde ve çalışma saatlerinde hatırlatma.
 - Tarih ve saat seçerek tek seferlik hatırlatma; **30 dakika sonra** kısayolu.
@@ -81,6 +83,35 @@ bekleyen teslimat, hatırlatma saatinden 24 saat sonra sona erer. Bu davranış
 bilgisayar moduna aittir. Bağımsız modda aynı kaçırılan tekrar kuralını cihaz
 uygular; geçmiş ve düğme işlemleri bağlantı gelince Masa'ya aktarılır.
 
+## Kolay tekrarlar ve cron
+
+**Her gün** seçeneğinde bir saat belirle. **Her saat** ve **Her 2 saatte**,
+kayıt anından itibaren 60 veya 120 dakika aralıklarla hatırlatır. Daha farklı
+aralıklar ve çalışma saatleri için **Belirli aralıklarla** seçeneğini kullan.
+
+**Cron** seçildiğinde `dakika saat ayın-günü ay haftanın-günü` biçiminde bir
+kural gir. Uygulama sonraki üç tarihi bilgisayarının yerel saatine göre gösterir.
+
+| İfade | Hatırlatma zamanı |
+| --- | --- |
+| `0 * * * *` | Her saat başı |
+| `0 */2 * * *` | 00:00, 02:00, 04:00… |
+| `0 9 * * *` | Her gün 09:00 |
+| `0 9 * * 1-5` | Hafta içi 09:00 |
+| `*/15 9-17 * * MON-FRI` | Hafta içi 09:00–17:59 arasında her 15 dakika |
+
+Liste, aralık ve adım desteklenir; ay/gün adları İngilizce üç harftir.
+`@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly` de kullanılabilir.
+Ayın günü ve haftanın günü birlikte kısıtlandığında iki koşuldan birinin
+sağlanması yeterlidir. Yaz saati geçişinde olmayan dakikalar atlanır; iki kez
+yaşanan dakika iki ayrı hatırlatma oluşturur. Bu kurallar
+[Cronie zamanlama biçimi](https://github.com/cronie-crond/cronie/blob/master/man/crontab.5)
+ile uyumludur. Cron alanı hatırlatmanın zamanını belirler; komut alanı bulunmaz.
+
+Bağımsız cihazda cron için firmware **0.7.0+** gerekir. Eski firmware ile
+günlük/aralıklı takvim devam eder; cron ekleme veya aktarma öncesinde uygulama
+güncelleme ister. Yerel kayıt biçimi 6'ya geçirilmeden önce mevcut kayıt yedeklenir.
+
 ## Gereksinimler
 
 | Bileşen | Gereksinim |
@@ -97,8 +128,8 @@ veya Node.js sunucusu, npm bağımlılığı ya da hesap gerekmez. Donanım par�
 bağlantı şeması [donanım kılavuzunda](docs/hardware.md) bulunur.
 
 Yazılım ve paketleme hedefi **macOS Apple Silicon**, firmware hedefi yukarıdaki
-ESP32-C3 OLED kartıdır. Yeni bağımsız çalışma akışı fiziksel kart üzerinde henüz
-doğrulanmamıştır. Windows/Linux paketleri ve diğer kart varyantları da ayrıca
+ESP32-C3 OLED kartıdır. 0.6.0 bağımsız takvim devri gerçek USB kartta doğrulandı;
+0.7.0 cron desteğinin fiziksel kart doğrulaması ayrıca yapılmalıdır. Windows/Linux paketleri ve diğer kart varyantları da ayrıca
 denenmelidir. Paketleri hedef işletim sisteminde oluştur.
 
 ## Kurulum

@@ -68,7 +68,7 @@ function validateSchedule(input) {
     quietHours, reminders, deferred, completedRoots, cancelledIds };
 }
 export function createSimulator({ token = process.env.DEVICE_TOKEN || 'local-simulator-token-12345678',
-  onNotice = console.log, protocol = 4, state: saved, persist = () => true, clock = Date.now } = {}) {
+  onNotice = console.log, protocol = 4, cron = true, state: saved, persist = () => true, clock = Date.now } = {}) {
   let state = clone(saved || { pending: [], recent: [], events: [] });
   state.schedule ??= emptySchedule();
   let timeValid = false, clockOffset = 0;
@@ -94,6 +94,7 @@ export function createSimulator({ token = process.env.DEVICE_TOKEN || 'local-sim
     next.schedule.history.push(job); return true;
   };
   const applySchedule = input => {
+    if (!cron && input?.reminders?.some(r => r.frequency === 'cron')) throw new Error('Cron unsupported');
     const incoming = inZone(input.timezone, input.utcNow, () => validateSchedule(input));
     const previous = state.schedule;
     const fingerprint = stable({ ownerId: incoming.ownerId, enabled: incoming.enabled, timezone: incoming.timezone, quietHours: incoming.quietHours,
@@ -133,7 +134,7 @@ export function createSimulator({ token = process.env.DEVICE_TOKEN || 'local-sim
     if (req.headers.authorization !== 'Bearer ' + token) return json(401, { error: 'Unauthorized' });
     if (req.method === 'GET' && req.url === '/api/health') return json(200, {
       name: 'Masa simulator', firmware: 'simulator', pending: state.pending.length, eventsPending: state.events.length,
-      ...(protocol === 4 ? { autonomous: state.schedule.enabled, timeValid, ownerId: state.schedule.ownerId, revision: state.schedule.revision, scheduleMaxTimestamp: 4102444800000 } : {}) });
+      ...(protocol === 4 ? { cron, autonomous: state.schedule.enabled, timeValid, ownerId: state.schedule.ownerId, revision: state.schedule.revision, scheduleMaxTimestamp: 4102444800000 } : {}) });
     if (protocol >= 3 && req.method === 'GET' && req.url === '/api/events') return json(200, { events: state.events });
     if (protocol === 4 && req.method === 'GET' && req.url === '/api/schedule') return json(200, responseSchedule());
     const ack = protocol >= 3 && req.url === '/api/events/ack';

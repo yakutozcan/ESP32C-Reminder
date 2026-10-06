@@ -156,7 +156,7 @@ test('legacy snooze migration separates outcome and delivery while retaining sno
     { id: 'grandchild', status: 'queued' }
   ] };
   const before = JSON.stringify(old); const state = migrateState(old);
-  assert.equal(state.version, 5);
+  assert.equal(state.version, 6);
   assert.deepEqual(state.jobs.map(j => j.rootId), ['root', 'root', 'root']);
   assert.deepEqual(state.jobs.map(j => j.outcome), ['snoozed', 'snoozed', 'pending']);
   assert.deepEqual(state.jobs.map(j => j.status), ['delivered', 'cancelled', 'queued']);

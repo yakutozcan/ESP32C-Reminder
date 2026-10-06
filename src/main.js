@@ -21,6 +21,7 @@ async function snapshot() {
 export const api = {
   snapshot,
   async exportBackup() { return (await getEngine()).exportBackup(); },
+  async previewSchedule(input) { return (await getEngine()).previewSchedule(input); },
   async previewImport(input) { return (await getEngine()).previewImport(input); },
   async importBackup(input) { await (await getEngine()).importBackup(input); return snapshot(); },
   async saveSettings(input) { await (await getEngine()).saveSettings(input); return snapshot(); },

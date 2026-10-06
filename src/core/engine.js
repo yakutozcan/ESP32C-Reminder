@@ -5,10 +5,10 @@ import { createBackup, parseBackup } from './backup.js';
 
 const defaultScheduler = () => ({ mode: 'desktop', desired: false, ownerId: '', revision: 0, syncedRevision: null });
 const clone = value => JSON.parse(JSON.stringify(value));
-export const newState = () => ({ version: 5, reminders: [], jobs: [], deviceEvents: [], settings: validateQuietHours(), scheduler: defaultScheduler(), device: { url: '', token: '' } });
+export const newState = () => ({ version: 6, reminders: [], jobs: [], deviceEvents: [], settings: validateQuietHours(), scheduler: defaultScheduler(), device: { url: '', token: '' } });
 
 export function migrateState(saved) {
-  if (![1, 2, 3, 4, 5].includes(saved.version) || !Array.isArray(saved.reminders) || !Array.isArray(saved.jobs))
+  if (![1, 2, 3, 4, 5, 6].includes(saved.version) || !Array.isArray(saved.reminders) || !Array.isArray(saved.jobs))
     throw new Error('Kayıt biçimi desteklenmiyor. Veriyi yedeklemeden sıfırlama.');
   const state = clone(saved);
   if (state.version >= 4 && (!Array.isArray(state.deviceEvents) || state.jobs.some(j =>
@@ -51,7 +51,7 @@ export function migrateState(saved) {
         (owner.mode === 'device' && !owner.ownerId) || (owner.mode === 'desktop' && owner.desired))
       throw new Error('Zamanlayıcı sahiplik kaydı geçerli değil. Veriyi yedeklemeden sıfırlama.');
   }
-  state.version = 5;
+  state.version = 6;
   return state;
 }
 
@@ -85,6 +85,25 @@ export class ReminderEngine {
     const stamps = [this.clock(), ...state.reminders.flatMap(r => [r.nextDue, r.scheduledAt, r.anchorAt]), ...state.jobs.filter(j => j.status === 'queued').flatMap(j => [j.due, j.expiresAt])].filter(n => n !== undefined && n !== null);
     if (stamps.some(n => n < 946684800000 || n > max)) throw new Error('Bu cihaz seçilen tarihlerden birini desteklemiyor. Daha yakın bir tarih seç.');
   }
+  async assertCronDevice(state, health, refresh = false) {
+    if (!state.reminders.some(r => r.frequency === 'cron')) return;
+    if (!refresh && !health && state.scheduler.cronSupported === true) return;
+    const capability = health ?? (this.health && await this.health(state.device));
+    if (capability?.protocol !== 4 || capability.cron !== true)
+      throw new Error('Cron için cihaz yazılımını 0.7.0 veya daha yeni bir sürüme güncelle.');
+    state.scheduler.cronSupported = true;
+  }
+  previewSchedule({ reminder }) {
+    const value = validateReminder({ ...reminder, title: reminder?.title || 'Hatırlatıcı', melody: reminder?.melody || 'chime' });
+    const occurrences = [];
+    let after = this.clock();
+    for (let i = 0; i < 3; i++) {
+      const due = nextAfter(value, after);
+      if (due === null) break;
+      occurrences.push(due); after = due;
+    }
+    return { occurrences, ...(value.frequency === 'cron' ? { cronExpression: value.cronExpression } : {}) };
+  }
   bump(state) { state.scheduler.revision++; delete state.scheduler.commands; delete state.scheduler.error; }
   saveReminder(input) {
     return this.serial(async () => {
@@ -100,7 +119,7 @@ export class ReminderEngine {
       if (index < 0) state.reminders.push(reminder);
       else state.reminders[index] = reminder;
       for (const job of state.jobs) if (job.reminderId === reminder.id && job.status === 'queued') job.status = 'cancelled';
-      if (state.scheduler.mode === 'device') this.assertDeviceRange(state);
+      if (state.scheduler.mode === 'device') { this.assertDeviceRange(state); await this.assertCronDevice(state); }
       this.bump(state);
       await this.commit(state);
       return reminder;
@@ -240,6 +259,7 @@ export class ReminderEngine {
       state.reminders = [...kept, ...imported]; state.settings = parsed.settings;
       if (state.scheduler.mode === 'device') this.assertDeviceRange(state);
       if (JSON.stringify(state) === JSON.stringify(this.state)) return;
+      if (state.scheduler.mode === 'device') await this.assertCronDevice(state);
       this.bump(state);
       if (!this.backup || await this.backup(this.snapshot()) === false)
         throw new Error('İçe aktarmadan önce mevcut verinin yedeği kaydedilemedi.');
@@ -259,6 +279,8 @@ export class ReminderEngine {
       const state = this.snapshot();
       if (enabled) {
         const health = await this.health(state.device);
+        await this.assertCronDevice(state, health);
+        state.scheduler.cronSupported = health.cron === true;
         if (health.protocol !== 4) throw new Error('Bağımsız çalışma için cihaz yazılımını 0.6.0 sürümüne güncelle.');
         if (state.reminders.length > 24 || state.jobs.filter(j => j.status === 'queued' && j.expiresAt > this.clock()).length > 24)
           throw new Error('Bağımsız cihaz en fazla 24 hatırlatıcı ve 24 bekleyen erteleme saklar.');
@@ -349,6 +371,7 @@ export class ReminderEngine {
       // Keep newly downloaded device timers durable before reconfiguration.
       if (JSON.stringify(state) !== JSON.stringify(this.state)) await this.commit(state);
       if (needsWrite) {
+        await this.assertCronDevice(state, undefined, true);
         const deferred = state.jobs.filter(j => j.status === 'queued' && j.outcome === 'pending' && j.expiresAt > this.clock());
         if (deferred.length > 24 || state.reminders.length > 24) throw new Error('Cihaz takvim kapasitesi aşılıyor.');
         if (owner.commands?.revision !== owner.revision) {

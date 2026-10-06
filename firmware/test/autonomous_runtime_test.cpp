@@ -111,5 +111,16 @@ int main(){
   post(edit(payload(2),[](DynamicJsonDocument& d){d["timezone"]="STD-3";d["reminders"][0]["nextDue"]=fakeUtc+7200000;}));
   assert(server.status==200);assert(autonomous.reminders.front().nextDue==fakeUtc+7200000);assert(autonomous.deferred.front().due==fakeUtc+900000);
   assert(validTitle("Çç Ğğ İı Öö Şş Üü"));assert(!validTitle(String(81,'a')));assert(!validTitle("newline\n"));assert(!validTitle("   "));
+  auto cronPayload=[&](uint32_t revision,const char* expression){return edit(payload(revision),[&](DynamicJsonDocument& d){d["reminders"][0]["frequency"]="cron";d["reminders"][0]["time"]="00:00";d["reminders"][0]["cronExpression"]=expression;});};
+  reset();post(cronPayload(1,"*/15 9 * * 1-5"));assert(server.status==200);assert(autonomous.reminders.front().recurrence.kind==masa::Recurrence::Cron);
+  uptime+=1000;tickAutonomous();assert(queue.size()==1);assert(autonomous.reminders.front().nextDue==fakeUtc+900000);
+  const auto cronProgress=autonomous.reminders.front().nextDue;post(cronPayload(1,"*/15 9 * * 1-5"));assert(server.status==200);assert(autonomous.reminders.front().nextDue==cronProgress);
+  post(cronPayload(1,"*/30 9 * * 1-5"));assert(server.status==409);assert(autonomous.reminders.front().nextDue==cronProgress);
+  post(edit(cronPayload(2,"*/30 9 * * 1-5"),[](DynamicJsonDocument& d){d["reminders"][0]["nextDue"]=fakeUtc+1800000;}));assert(server.status==200);assert(queue.empty());assert(autonomous.reminders.front().nextDue==fakeUtc+1800000);
+  DynamicJsonDocument cronStored(16384);stateJson(cronStored.to<JsonObject>(),autonomous,true);AutonomousState cronRestored;assert(parseState(cronStored.as<JsonObject>(),cronRestored,true));assert(cronRestored.reminders.front().recurrence.kind==masa::Recurrence::Cron);assert(masa::nextAfter(cronRestored.reminders.front().recurrence,fakeUtc)==fakeUtc+1800000);
+  post(cronPayload(3,"0 9 31 2 *"));assert(server.status==400);assert(autonomous.revision==2);assert(autonomous.reminders.front().nextDue==fakeUtc+1800000);
+  post(cronPayload(3,"0 9 * * MON"));assert(server.status==400);assert(autonomous.revision==2); // Desktop must expand names.
+  post(cronPayload(3,"*/0 * * * *"));assert(server.status==400);
+  reset();post(edit(cronPayload(1,"0 9 * * *"),[](DynamicJsonDocument& d){d["reminders"][0].remove("time");}));assert(server.status==200); // Cron ignores the time placeholder.
   std::cout<<"Actual firmware API, ownership, revisions, timer races, quiet melody and rollback tests passed\n";
 }

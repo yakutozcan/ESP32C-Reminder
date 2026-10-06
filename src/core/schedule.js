@@ -1,3 +1,5 @@
+import { parseCron, nextCronAfter, latestCronDue } from './cron.js';
+export { parseCron, nextCronAfter, latestCronDue } from './cron.js';
 // Calendar arithmetic deliberately uses the computer's local time zone.
 // txiki.js has Date but no Intl. Do not replace calendar days with 24h offsets.
 export const DAY = 24 * 60 * 60 * 1000;
@@ -25,9 +27,9 @@ export function validateReminder(input) {
   const title = typeof input.title === 'string' ? input.title.trim() : '';
   if (!title || [...title].length > 80 || /[\x00-\x1f\x7f]/.test(title))
     throw new Error('Başlık 1–80 karakter olmalı ve tek satırdan oluşmalı.');
-  if (!['once', 'daily', 'weekly', 'monthly', 'interval'].includes(input.frequency))
+  if (!['once', 'daily', 'weekly', 'monthly', 'interval', 'cron'].includes(input.frequency))
     throw new Error('Geçerli bir tekrar seç.');
-  const time = input.frequency === 'interval' ? (input.time ?? '09:00') : input.time;
+  const time = input.frequency === 'interval' ? (input.time ?? '09:00') : input.frequency === 'cron' ? (input.time ?? '00:00') : input.time;
   if (!CLOCK.test(time)) throw new Error('Geçerli bir saat seç (00:00–23:59).');
   const weekdays = [...new Set(input.weekdays ?? (input.frequency === 'interval' ? [0, 1, 2, 3, 4, 5, 6] : []))].sort();
   if (['weekly', 'interval'].includes(input.frequency) && (!weekdays.length || weekdays.some(d => !Number.isInteger(d) || d < 0 || d > 6)))
@@ -42,6 +44,7 @@ export function validateReminder(input) {
     scheduledAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute).getTime();
   }
   const recurrence = {};
+  if (input.frequency === 'cron') recurrence.cronExpression = parseCron(input.cronExpression).expression;
   if (input.frequency === 'weekly') {
     const weekInterval = input.weekInterval ?? 1;
     if (![1, 2].includes(weekInterval)) throw new Error('Hafta aralığı 1 veya 2 olmalı.');
@@ -99,6 +102,7 @@ function intervalAfter(reminder, after) {
 }
 
 export function nextAfter(reminder, after) {
+  if (reminder.frequency === 'cron') return nextCronAfter(reminder.cronExpression, after);
   if (reminder.frequency === 'once') return reminder.scheduledAt > after ? reminder.scheduledAt : null;
   if (reminder.frequency === 'interval') return intervalAfter(reminder, after);
   const base = new Date(after);
@@ -121,6 +125,7 @@ export function nextAfter(reminder, after) {
 }
 
 export function latestDue(reminder, firstDue, now) {
+  if (reminder.frequency === 'cron') return latestCronDue(reminder.cronExpression, firstDue, now);
   if (firstDue === null || firstDue > now) return null;
   if (reminder.frequency === 'once') return firstDue > now - DAY ? firstDue : null;
   if (reminder.frequency === 'interval') {

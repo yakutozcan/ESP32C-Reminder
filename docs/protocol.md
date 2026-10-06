@@ -1,6 +1,6 @@
 # Local reminder protocol · version 4
 
-Masa 0.6.0 and firmware 0.6.0 communicate on the same LAN, on TCP port 80.
+Masa 0.7.0 and firmware 0.7.0 communicate on the same LAN, on TCP port 80.
 All `/api/` endpoints require `Authorization: Bearer <DEVICE_TOKEN>`.
 The passwordless captive portal is available only in setup mode, where Ayres
 owns port 80 and the reminder endpoints are unavailable. No cloud or incoming
@@ -16,7 +16,7 @@ Protocol 1 produces an explicit upgrade message.
 `GET /api/health`
 
 ```json
-{"protocol":4,"name":"Masa ESP32-C3","firmware":"0.6.0","pending":0,"eventsPending":0,"autonomous":true,"timeValid":true,"ownerId":"desktop-uuid","revision":7,"scheduleMaxTimestamp":2145916800000,"ip":"192.168.1.50","rssi":-50}
+{"protocol":4,"name":"Masa ESP32-C3","firmware":"0.7.0","cron":true,"pending":0,"eventsPending":0,"autonomous":true,"timeValid":true,"ownerId":"desktop-uuid","revision":7,"scheduleMaxTimestamp":2145916800000,"ip":"192.168.1.50","rssi":-50}
 ```
 
 `pending` includes the displayed notice (maximum 8). `eventsPending` counts
@@ -100,7 +100,19 @@ Recurrence fields:
 | `daily` | Local `time` |
 | `weekly` | `weekdays` (Sunday 0), `weekInterval` 1 or 2, `anchorDate` anchoring Monday weeks |
 | `monthly` | `monthDay` 1–31, clamped to the last day of each month |
+| `cron` | `cronExpression`, a normalized numeric five-field cron expression; `time` is unused |
 | `interval` | `intervalMinutes` 1–10080, fixed `anchorAt`, allowed `weekdays`; optional paired `workStart`/`workEnd` |
+
+Cron uses local-time minute matching, with lists, inclusive ranges and steps.
+Desktop accepts JAN–DEC/SUN–SAT names and standard hourly/daily/weekly/monthly/yearly
+aliases, then sends numeric expressions. Leading `*` in either day field selects
+AND semantics; two restricted day fields select OR, following
+[Cronie](https://github.com/cronie-crond/cronie/blob/master/man/crontab.5).
+Missing DST minutes are skipped; repeated minutes create separate UTC occurrence
+IDs. No seconds, year or command field is accepted. Invalid or impossible rules
+fail validation. `GET /api/health` must advertise `cron: true` before desktop
+handover, cron edits or imports in device mode. Older protocol-4 devices remain
+usable for other recurrence types; absent capability means cron is unsupported.
 
 Without a work window, intervals use an elapsed-time grid from their anchor.
 With a window, each allowed local day starts a new grid at `workStart`, and
@@ -193,7 +205,7 @@ behaviors have host tests; physical board verification remains pending.
 
 ## Storage, migration and rollback
 
-Firmware 0.6.0 atomically renames `/masa-state.tmp` to `/masa-state.json` in
+Firmware 0.7.0 atomically renames `/masa-state.tmp` to `/masa-state.json` in
 LittleFS, storing pending/recent/events/schedule together before acknowledging
 a mutation. An interrupted or failed write preserves the previous snapshot.
 `/wifi.json` and the original NVS queue/key remain separate and intact. First
@@ -207,13 +219,14 @@ Before downgrade: disable autonomous scheduling, synchronize/drain actions,
 retain backups, and account for stale NVS notices replaying. An old firmware
 cannot consume the new LittleFS schedule; rollback is not seamless.
 
-Desktop state version 5 adds quiet preferences and persisted scheduler ownership
-while preserving older schedules, IDs, snooze families and receipts. Original
-v1–4 states are backed up under `reminder-state-v<version>-backup` before startup
+Desktop state version 6 adds cron definitions; version 5 added quiet preferences
+and persisted scheduler ownership. Migration preserves schedules, IDs, snooze
+families, receipts, device credentials and active ownership. Original v1–5 states are backed up under `reminder-state-v<version>-backup` before startup
 migration. v1 vibration settings become chime/silence; v3's legacy snoozed status
 becomes an outcome separate from delivery status. Returning to an older desktop
 requires confirmed device handback, quitting the app and restoring the matching
-state backup. Later changes do not appear in that backup.
+state backup. Version 6 prevents an old desktop from interpreting cron as a
+daily reminder. Later changes do not appear in that backup.
 
 Portable `masa-reminders` JSON version 1 exports definitions/preferences only,
 excluding keys, Wi-Fi, runtime jobs and ownership. Import validates the full
@@ -221,7 +234,7 @@ file and combined capacity before writing. Existing data is saved under
 `reminder-import-backup` as `{createdAt,state}` before a changed import; failures
 preserve current state. Merge replaces matching IDs without duplicates and keeps
 other definitions; replace removes other definitions. An identical import is
-read-only. Historical raw desktop state v1–5 can be imported as definitions.
+read-only. Historical raw desktop state v1–6 can be imported as definitions.
 
 ## OLED, simulator and provisioning
 

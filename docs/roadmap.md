@@ -3,11 +3,13 @@
 Başlangıç: 5 Ekim 2026. Özellikler mevcut yerel çalışma modelini koruyarak,
 her aşamada kullanılabilir ve doğrulanmış bir sürüm oluşturacak şekilde eklenir.
 
-**Güncel durum: 6 Ekim 2026, Masa 0.6.0 / firmware 0.6.0.** Altı aşamanın
-yazılımı tamamlandı. Firmware gerçek USB karta yüklendi; masaüstü uygulaması
-güncel kaynaklarla yeniden derlendi ve Apple Silicon paketinin sürüm/imza
-kontrolü geçti. İlk iki aşama kendi tarihsel sürümlerini kaydeder; güncel
-donanım doğrulaması ve kalan işler aşağıda ayrı belirtilir.
+**Güncel durum: 6 Ekim 2026, Masa 0.7.0 / firmware 0.7.0.** İlk altı aşamanın
+yazılımı tamamlandı; kolay tekrarlar ve cron 7. aşamada eklendi. 123 uygulama
+testi, firmware testleri ve 0.7.0 macOS paketinin sürüm/imza kontrolü geçti.
+Kartın tam yedeği alındı; firmware 0.7.0 yüklendi, cron özelliği ve mevcut
+takvim/bağlantı/geçmişin korunduğu doğrulandı.
+İlk iki aşama kendi tarihsel sürümlerini kaydeder; donanım doğrulaması ve kalan
+işler aşağıda ayrı belirtilir.
 
 ## 1. Tek seferlik hatırlatma ve uygulamadan erteleme
 
@@ -89,7 +91,7 @@ akışları otomatik testlerde, gerçek motorla tarayıcıda ve native çekirdek
 
 **Durum: yazılım tamamlandı.** En fazla 100 hatırlatıcı ve 1 MB dosya kabul edilir;
 bağımsız cihaz modunda toplam 24 hatırlatıcı sınırı uygulanır. Taşınabilir biçim
-`masa-reminders / 1`, güncel yerel kayıt biçimi `5`'tir. İçe aktarma öncesi tam
+`masa-reminders / 1`, güncel yerel kayıt biçimi `6`'tir. İçe aktarma öncesi tam
 kayıt `reminder-import-backup` alanında `{createdAt, state}` olarak saklanır.
 
 ## 5. Bilgisayardan bağımsız cihaz zamanlaması
@@ -140,16 +142,40 @@ tekrar gösterebilir; geri dönüşün bu sınırı fiziksel doğrulama gerektir
 **Durum: yazılım tamamlandı.** Yeni bildirim ekranı uyandırır; boşta BOOT'a basmak
 bilgiyi görünür hale getirir. Otomatik ekran kapanması bir işi tamamlandı saymaz.
 
+## 7. Kolay tekrar seçenekleri ve cron
+
+- [x] Her gün, Her saat ve Her 2 saatte hazır seçimleri; mevcut özel aralıkları koruma.
+- [x] Beş alanlı cron; liste, aralık, adım, ay/gün adları ve yaygın kısayollar.
+- [x] Cron örnekleri, alan doğrulaması ve sonraki üç zamanın önizlemesi.
+- [x] Yerel takvim, sessiz saatler, erteleme/tamamlandı ve yedeklerde cron tanımları.
+- [x] Bağımsız ESP32 cron zamanlaması; eski firmware için özellik kontrolü.
+- [x] Kayıt biçimi 5 → 6 geçişinden önce yedek; sahiplik ve mevcut kayıtların korunması.
+- [x] 123 uygulama testi; C++ cron/API testleri, firmware derlemesi ve native çekirdek.
+- [x] Gerçek motor/HTTP simülatörüyle geniş ve dar arayüz akışları; hatalı/gecikmiş önizleme yanıtları.
+- [x] Masa 0.7.0 macOS Apple Silicon paketi; sürüm ve imza kontrolü.
+- [x] USB karta yükleme öncesi 4 MB flash yedeği ve SHA-256 kontrolü.
+- [x] Firmware 0.7.0 yüklemesi; cron yeteneği, NTP ve mevcut takvim/Wi-Fi/anahtarın korunması.
+- [ ] Cron'un gerçek USB kartta bağımsız üretim ve yeniden başlatma doğrulaması.
+
+**Durum: yazılım ve paket tamamlandı (Masa/firmware 0.7.0).**
+Saatlik hazır seçimler kayıt anından başlayan aralıkları, cron ise yerel saate
+bağlı dakika kurallarını kullanır. Yaz saatindeki kayıp dakikalar atlanır;
+tekrarlanan dakikalar ayrı kimliklerle iki kez çalışır. JavaScript ve C++
+zamanlama sonuçları 16 karşılaştırma senaryosunda aynı çıktı. Kartta çalışan
+mevcut takvimin sahipliği/sürümü, bir zaman imleci ve iki geçmiş kaydı yükleme
+sonrasında aynen korundu. Cron için cihazın `cron:true` yanıtı doğrulandı;
+fiziksel kartta bir cron bildiriminin zamanında üretilmesi ayrıca test edilecek.
+
 ## Son doğrulama ve paket
 
-- [x] 103 uygulama testi; eski kayıt geçişleri, takvim/DST, yedekleme, sahiplik,
+- [x] 123 uygulama testi; eski kayıt geçişleri, takvim/DST, yedekleme, sahiplik,
       kaybolan yanıtlar ve çevrimdışı erteleme senaryoları.
 - [x] Firmware derlemesi; OLED/düğme C++ testleri, takvim/atomik depolama ve
       gerçek firmware başlıklarıyla API testleri.
 - [x] Gerçek motor ve HTTP simülatörüyle dar/geniş tarayıcı akışları; kaybolan
       kapatma yanıtı sonrası güvenli yeniden eşitleme.
-- [x] tinyjs'in native çekirdeğinde takvim, sessiz saatler, yedekleme ve sahiplik.
-- [x] Masa 0.6.0 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
+- [x] tinyjs'in native çekirdeğinde cron/takvim, sessiz saatler, yedekleme ve sahiplik.
+- [x] Masa 0.7.0 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
       paket sürümü ve imzasının doğrulanması.
 - [x] Gerçek USB kartta yükleme, NTP, bağımsız takvim, yeniden başlatma ve
       uygulamayla devir/eşitleme. Ayrıntılar [donanım kaydında](hardware.md#usb-kart-doğrulaması--6-ekim-2026).
@@ -159,18 +185,19 @@ bilgiyi görünür hale getirir. Otomatik ekran kapanması bir işi tamamlandı 
 Yeni yazılım özelliği beklemiyor. Kalan işler fiziksel doğrulama ve paket
 kullanım kontrolleridir; henüz yapılmayan kontroller tamamlandı sayılmaz.
 
-1. OLED'deki Türkçe test yazısı ve bağlı buzzerın melodisi için fiziksel onay.
+1. Mevcut takvimi koruyarak ayrı fiziksel cron üretimi ve yeniden başlatma testi.
+2. OLED'deki Türkçe test yazısı ve bağlı buzzerın melodisi için fiziksel onay.
    Test bildirimi gönderildi; kullanıcı gözlemi henüz alınmadı.
-2. BOOT'un kısa/çift basış, 1–5 saniye erteleme ve 5 saniye kurulum hareketleri;
+3. BOOT'un kısa/çift basış, 1–5 saniye erteleme ve 5 saniye kurulum hareketleri;
    erteleme ve tamamlanma olaylarının uygulamaya yalnızca bir kez aktarılması.
-3. USB'yi çıkarıp takarak gerçek güç kesintisi; takvim/olayların korunması ve
+4. USB'yi çıkarıp takarak gerçek güç kesintisi; takvim/olayların korunması ve
    güvenilir saat alınana kadar zamanlamanın beklemesi. USB yazılım yeniden
    başlatması bu güç kesintisi testinin yerine geçmez.
-4. Bilgisayar gerçekten kapalıyken ve ağ kesildiğinde cihazın çalışması;
+5. Bilgisayar gerçekten kapalıyken ve ağ kesildiğinde cihazın çalışması;
    yeniden bağlanınca geçmiş ve eylemlerin doğru eşitlenmesi.
-5. Boşta OLED'in 60 saniyede kısılması, 120 saniyede kapanması, BOOT ve yeni
+6. Boşta OLED'in 60 saniyede kısılması, 120 saniyede kapanması, BOOT ve yeni
    bildirimle uyanması.
-6. Derlenen macOS uygulamasının native penceresinde son kullanım kontrolü;
+7. Derlenen macOS uygulamasının native penceresinde son kullanım kontrolü;
    diğer işletim sistemleri ve Intel Mac paketlerinin ayrıca derlenip denenmesi.
 
 README ve protokol belgeleri güncel davranışı ve geçiş sınırlarını kaydeder.

@@ -79,8 +79,9 @@ bool parseReminder(JsonObject obj,AutonomousReminder& r) {
   if(!validTitle(r.title))return false;
   auto& rule=r.recurrence;
   String frequency=obj["frequency"]|"";
-  rule.minute=readMinute(obj["time"]);if(rule.minute<0)return false;
-  if(frequency=="once") {rule.kind=masa::Recurrence::Once;if(!validMillis(obj["scheduledAt"]))return false;rule.scheduledAt=obj["scheduledAt"].as<int64_t>();}
+  rule.minute=readMinute(obj["time"]);if(frequency!="cron"&&rule.minute<0)return false;
+  if(frequency=="cron") {rule.kind=masa::Recurrence::Cron;if(!obj["cronExpression"].is<String>()||!masa::parseCron(obj["cronExpression"].as<String>().c_str(),rule.cron))return false;}
+  else if(frequency=="once") {rule.kind=masa::Recurrence::Once;if(!validMillis(obj["scheduledAt"]))return false;rule.scheduledAt=obj["scheduledAt"].as<int64_t>();}
   else if(frequency=="daily")rule.kind=masa::Recurrence::Daily;
   else if(frequency=="monthly") {rule.kind=masa::Recurrence::Monthly;rule.monthDay=obj["monthDay"]|0;if(rule.monthDay<1||rule.monthDay>31)return false;}
   else if(frequency=="weekly"||frequency=="interval") {

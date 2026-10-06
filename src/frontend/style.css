@@ -74,6 +74,7 @@ input[aria-invalid='true'] { border-color: var(--color-error); }
 input:disabled, select:disabled { opacity: .55; cursor: not-allowed; }
 small { font-size: 13px; color: var(--color-muted); }
 .form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-md); }
+.form-row.single-column { grid-template-columns: minmax(0, 1fr); }
 fieldset { border: 0; padding: 0; margin: 0 0 var(--space-lg); }
 legend { font-size: 14px; margin-bottom: var(--space-xs); }
 .weekday-picker { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -91,6 +92,16 @@ legend { font-size: 14px; margin-bottom: var(--space-xs); }
 .settings-section h3 { font-size: 17px; font-weight: 600; margin: 0 0 var(--space-sm); }
 .settings-section .form-note { color: var(--color-muted); margin: var(--space-xs) 0 var(--space-md); }
 .import-titles { max-height: 180px; overflow-y: auto; padding-left: 22px; margin: 0 0 var(--space-lg); font-size: 14px; overflow-wrap: anywhere; }
+.cron-presets { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-sm); }
+.cron-presets button { font-size: 13px; padding: 4px 10px; white-space: normal; }
+#cron-field .form-note { color: var(--color-muted); margin: 0 0 var(--space-md); }
+#cron-field input { font-family: monospace; }
+#cron-field label { margin-bottom: var(--space-sm); }
+#cron-field .form-error { min-height: 0; }
+.schedule-preview { font-size: 14px; border-left: 2px solid var(--color-accent); padding-left: var(--space-sm); margin-bottom: var(--space-lg); }
+.schedule-preview p { margin: 0; color: var(--color-muted); }
+.schedule-preview ol { margin: var(--space-xs) 0 0; padding-left: 22px; font-variant-numeric: tabular-nums; }
+.schedule-preview:has(p:empty):has(ol:empty) { display: none; }
 #import-form .check-label { align-items: flex-start; margin-bottom: var(--space-xs); }
 #import-form .check-label input { margin-top: 3px; flex-shrink: 0; }
 .toast { position: fixed; bottom: var(--space-lg); right: var(--space-lg); max-width: calc(100% - 32px); display: flex; align-items: center; gap: var(--space-sm); background: var(--color-ink); color: var(--color-paper); padding: var(--space-sm) var(--space-md); border-radius: 5px; z-index: 500; font-size: 14px; }

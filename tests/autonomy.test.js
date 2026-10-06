@@ -135,7 +135,7 @@ test('quiet hours are evaluated at retry send time and also passed to native not
 test('v4 migration preserves existing cursors and receipts while v5 ownership corruption fails closed', () => {
   const saved = { version: 4, reminders: [{ id: 'saved', nextDue: 123 }], jobs: [], deviceEvents: ['kept'], device: { url: 'http://device', token: 'secret' } };
   const state = migrateState(saved);
-  assert.equal(state.version, 5); assert.deepEqual(state.reminders, saved.reminders); assert.deepEqual(state.deviceEvents, saved.deviceEvents);
+  assert.equal(state.version, 6); assert.deepEqual(state.reminders, saved.reminders); assert.deepEqual(state.deviceEvents, saved.deviceEvents);
   assert.equal(state.scheduler.mode, 'desktop'); assert.equal(saved.version, 4);
   assert.throws(() => migrateState({ ...newState(), scheduler: { mode: 'device', desired: true, ownerId: '', revision: 1 } }), /sahiplik/);
 });

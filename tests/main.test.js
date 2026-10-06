@@ -22,12 +22,12 @@ function appFixture(saved, failKey) {
   return { app, values, writes };
 }
 
-test('desktop startup stores v2 backup before committing v5 and retains an existing backup', async t => {
+test('desktop startup stores v2 backup before committing v6 and retains an existing backup', async t => {
   t.mock.method(globalThis, 'setInterval', () => 0);
   const saved = { version: 2, reminders: [], jobs: [], device: { url: '', token: '' } };
   const f = appFixture(saved);
   init(f.app);
-  assert.equal((await api.snapshot()).version, 5);
+  assert.equal((await api.snapshot()).version, 6);
   assert.deepEqual(f.writes, ['reminder-state-v2-backup', 'reminder-state']);
   assert.deepEqual(f.values.get('reminder-state-v2-backup'), saved);
   const existing = { ...saved, jobs: [{ id: 'previous-backup' }] };
@@ -51,7 +51,7 @@ test('desktop startup refuses migration when the backup cannot be saved', async 
   assert.deepEqual(f.values.get('reminder-state'), saved);
 });
 
-test('desktop startup skips migration and backup writes for v5', async t => {
+test('desktop startup skips migration and backup writes for v6', async t => {
   t.mock.method(globalThis, 'setInterval', () => 0);
   const f = appFixture(newState());
   init(f.app);
@@ -75,8 +75,18 @@ test('desktop startup backs up v4 before adding quiet settings and scheduler own
   const saved = { version: 4, reminders: [], jobs: [], deviceEvents: ['old-receipt'], device: { url: '', token: '' } };
   const f = appFixture(saved); init(f.app);
   const state = await api.snapshot();
-  assert.equal(state.version, 5); assert.deepEqual(state.deviceEvents, saved.deviceEvents);
+  assert.equal(state.version, 6); assert.deepEqual(state.deviceEvents, saved.deviceEvents);
   assert.equal(state.scheduler.mode, 'desktop'); assert.equal(state.settings.quietEnabled, false);
   assert.deepEqual(f.values.get('reminder-state-v4-backup'), saved);
   assert.deepEqual(f.writes, ['reminder-state-v4-backup', 'reminder-state']);
+});
+
+test('desktop startup backs up v5 and preserves device ownership before committing v6', async t => {
+  t.mock.method(globalThis, 'setInterval', () => 0);
+  const saved = { ...newState(), version: 5, scheduler: { mode: 'device', desired: true, ownerId: 'kept-owner', revision: 4, syncedRevision: 4 }, device: { url: '', token: '' } };
+  const f = appFixture(saved); init(f.app);
+  const state = await api.snapshot();
+  assert.equal(state.version, 6); assert.deepEqual(state.scheduler, saved.scheduler);
+  assert.deepEqual(f.values.get('reminder-state-v5-backup'), saved);
+  assert.deepEqual(f.writes, ['reminder-state-v5-backup', 'reminder-state']);
 });

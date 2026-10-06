@@ -45,7 +45,7 @@ export function parseBackup(input) {
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Yedek biçimi desteklenmiyor.');
   const portable = data.format === BACKUP_FORMAT;
-  const historic = data.format === undefined && [1, 2, 3, 4, 5].includes(data.version) && Array.isArray(data.jobs);
+  const historic = data.format === undefined && [1, 2, 3, 4, 5, 6].includes(data.version) && Array.isArray(data.jobs);
   if (portable ? data.version !== 1 : !historic) throw new Error('Yedek biçimi veya sürümü desteklenmiyor.');
   return { reminders: definitions(data.reminders, historic && data.version === 1),
     settings: preferences(data.settings) };

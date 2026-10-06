@@ -21,7 +21,7 @@ test('portable export preserves definitions and quiet preferences without creden
 });
 
 test('current and legacy state exports import definitions only without mutating source', () => {
-  for (const version of [1, 2, 3, 4, 5]) {
+  for (const version of [1, 2, 3, 4, 5, 6]) {
     const entry = version === 1 ? { ...reminder, melody: undefined, vibrationMs: 0 } : reminder;
     const data = { version, reminders: [entry], jobs: [{ arbitrary: true }], device: { token: 'secret' } };
     const before = JSON.stringify(data);
@@ -48,7 +48,7 @@ test('portable backup retains two-week and interval schedules as stable definiti
   const reminders = [
     { ...reminder, frequency: 'weekly', weekdays: [1, 5], weekInterval: 2, anchorDate: '2026-10-05' },
     { ...reminder, id: 'interval', frequency: 'interval', intervalMinutes: 120,
-      anchorAt: new Date('2026-10-06T08:00:00').getTime(), weekdays: [1, 2, 3, 4, 5], workStart: '09:00', workEnd: '18:00' }
+      anchorAt: new Date('2026-10-06T08:00:00').getTime(), weekdays: [1, 2, 3, 4, 5, 6], workStart: '09:00', workEnd: '18:00' }
   ];
   const data = parseBackup(createBackup({ reminders }));
   assert.equal(data.reminders[0].anchorDate, '2026-10-05');

@@ -16,8 +16,11 @@ let snoozeId;
 let mutationBusy = false;
 let renderedState = '';
 let importText = '';
+let previewTimer;
+let previewGeneration = 0;
+const simpleIntervals = { hourly: 60, two_hourly: 120 };
 const weekdays = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
-const frequency = { once: 'Tek seferlik', daily: 'Her gün', weekly: 'Her hafta', monthly: 'Her ay', interval: 'Aralıklı' };
+const frequency = { once: 'Tek seferlik', daily: 'Her gün', weekly: 'Her hafta', monthly: 'Her ay', interval: 'Aralıklı', cron: 'Cron' };
 const escapeHTML = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dateText = value => new Date(value).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
@@ -34,6 +37,7 @@ function toast(message, undo) {
 $('.dismiss-toast').onclick = () => { $('#toast').hidden = true; };
 function repeatText(r) {
   if (r.frequency === 'once') return 'Tek seferlik · ' + dateText(r.scheduledAt);
+  if (r.frequency === 'cron') return 'Cron · ' + escapeHTML(r.cronExpression);
   if (r.frequency === 'weekly') return (r.weekInterval === 2 ? 'İki haftada bir · ' : '') + r.weekdays.map(d => weekdays[d]).join(', ');
   if (r.frequency === 'interval') return `${r.intervalMinutes % 60 === 0 ? r.intervalMinutes / 60 + ' saatte' : r.intervalMinutes + ' dakikada'} bir` + (r.weekdays.length < 7 ? ' · ' + r.weekdays.map(d => weekdays[d]).join(', ') : '') + (r.workStart ? ` · ${r.workStart}–${r.workEnd}` : '');
   if (r.frequency === 'monthly') return 'Her ayın ' + r.monthDay + '. günü';
@@ -99,16 +103,25 @@ function render() {
   const enabled = state.reminders.filter(r => r.enabled).length;
   const ended = state.reminders.filter(r => r.frequency === 'once' && r.nextDue === null).length;
   $('#summary').textContent = enabled + ' etkin · ' + (state.reminders.length - enabled - ended) + ' duraklatılmış' + (ended ? ' · ' + ended + ' zamanı geçmiş' : '');
-  el.innerHTML = reminders.length ? reminders.map(r => `<article class="reminder-row ${r.enabled ? '' : 'paused'}"><div class="reminder-time">${r.frequency === 'interval' && r.nextDue ? new Date(r.nextDue).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : r.time}</div><div><h3 class="reminder-title">${escapeHTML(r.title)}</h3><p class="reminder-detail">${repeatText(r)} · ${r.enabled ? 'Sıradaki: ' + dateText(r.nextDue) : r.nextDue === null ? 'Takvim sona erdi' : 'Duraklatıldı'} · ${r.melody === 'chime' ? 'Kısa melodi' : 'Sessiz'}</p></div><div class="row-actions">${r.nextDue === null ? '' : `<button data-action="toggle" data-id="${escapeHTML(r.id)}" aria-label="${escapeHTML(r.title)}: ${r.enabled ? 'duraklat' : 'başlat'}">${r.enabled ? 'Duraklat' : 'Başlat'}</button>`}<button data-action="edit" data-id="${escapeHTML(r.id)}">Düzenle</button><button data-action="delete" data-id="${escapeHTML(r.id)}">Sil</button></div></article>`).join('') : `<div class="empty"><span class="empty-mark" aria-hidden="true">∴</span><h3>${state.reminders.length ? 'Bu görünümde not yok.' : 'İlk notunu bırak.'}</h3><p>${state.reminders.length ? 'Diğer tekrarları görebilir veya yeni bir hatırlatıcı ekleyebilirsin.' : 'Su içmek, bitkileri sulamak, bir mola vermek. Tekrar eden küçük işleri Masa’ya bırak.'}</p><button class="primary" data-action="add">Hatırlatıcı ekle</button></div>`;
+  el.innerHTML = reminders.length ? reminders.map(r => `<article class="reminder-row ${r.enabled ? '' : 'paused'}"><div class="reminder-time">${['interval', 'cron'].includes(r.frequency) ? r.nextDue ? new Date(r.nextDue).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—' : r.time}</div><div><h3 class="reminder-title">${escapeHTML(r.title)}</h3><p class="reminder-detail">${repeatText(r)} · ${r.enabled ? 'Sıradaki: ' + dateText(r.nextDue) : r.nextDue === null ? 'Takvim sona erdi' : 'Duraklatıldı'} · ${r.melody === 'chime' ? 'Kısa melodi' : 'Sessiz'}</p></div><div class="row-actions">${r.nextDue === null ? '' : `<button data-action="toggle" data-id="${escapeHTML(r.id)}" aria-label="${escapeHTML(r.title)}: ${r.enabled ? 'duraklat' : 'başlat'}">${r.enabled ? 'Duraklat' : 'Başlat'}</button>`}<button data-action="edit" data-id="${escapeHTML(r.id)}">Düzenle</button><button data-action="delete" data-id="${escapeHTML(r.id)}">Sil</button></div></article>`).join('') : `<div class="empty"><span class="empty-mark" aria-hidden="true">∴</span><h3>${state.reminders.length ? 'Bu görünümde not yok.' : 'İlk notunu bırak.'}</h3><p>${state.reminders.length ? 'Diğer tekrarları görebilir veya yeni bir hatırlatıcı ekleyebilirsin.' : 'Su içmek, bitkileri sulamak, bir mola vermek. Tekrar eden küçük işleri Masa’ya bırak.'}</p><button class="primary" data-action="add">Hatırlatıcı ekle</button></div>`;
 }
 function updateRecurrenceFields() {
   const selected = form.elements.frequency.value;
   const interval = selected === 'interval';
+  const simple = Object.hasOwn(simpleIntervals, selected);
+  const cron = selected === 'cron';
   const weekly = selected === 'weekly';
   $('#weekday-field').hidden = !weekly && !interval;
   $('#weekly-options').hidden = !weekly;
   $('#interval-field').hidden = !interval;
-  $('#time-field').hidden = interval;
+  $('#time-field').hidden = interval || simple || cron;
+  $('#recurrence-row').classList.toggle('single-column', interval || simple || cron);
+  form.elements.time.disabled = interval || simple || cron;
+  form.elements.time.required = !form.elements.time.disabled;
+  $('#simple-interval-note').hidden = !simple;
+  $('#cron-field').hidden = !cron;
+  form.elements.cronExpression.disabled = !cron;
+  form.elements.cronExpression.required = cron;
   form.elements.intervalMinutes.disabled = !interval;
   form.elements.anchorDate.disabled = !weekly;
   form.elements.anchorDate.required = weekly;
@@ -121,6 +134,51 @@ function updateRecurrenceFields() {
   form.elements.onceDate.required = once;
   form.elements.monthDay.disabled = form.elements.frequency.value !== 'monthly';
 }
+function reminderInput() {
+  const selected = form.elements.frequency.value;
+  const simple = Object.hasOwn(simpleIntervals, selected);
+  const existing = state?.reminders.find(r => r.id === editId);
+  return { id: editId, title: form.elements.title.value, frequency: simple ? 'interval' : selected,
+    ...(selected === 'cron' ? { cronExpression: form.elements.cronExpression.value } : { time: form.elements.time.value }),
+    weekdays: simple ? [0, 1, 2, 3, 4, 5, 6] : [...$('#weekday-field').querySelectorAll('input:checked')].map(b => Number(b.value)),
+    onceDate: form.elements.onceDate.value, monthDay: Number(form.elements.monthDay.value), melody: form.elements.melody.value,
+    weekInterval: Number(form.elements.weekInterval.value), anchorDate: form.elements.anchorDate.value,
+    intervalMinutes: simple ? simpleIntervals[selected] : Number(form.elements.intervalMinutes.value), anchorAt: existing?.anchorAt ?? Date.now(),
+    ...(selected === 'interval' && form.elements.workHours.checked ? { workStart: form.elements.workStart.value, workEnd: form.elements.workEnd.value } : {}),
+    enabled: existing ? existing.nextDue === null || existing.enabled : true };
+}
+function cancelPreview() {
+  previewGeneration++; clearTimeout(previewTimer);
+}
+function schedulePreview() {
+  cancelPreview();
+  $('#cron-error').textContent = ''; $('#cron-occurrences').replaceChildren();
+  form.elements.cronExpression.removeAttribute('aria-invalid');
+  $('#cron-preview-status').textContent = '';
+  if (form.elements.frequency.value !== 'cron' || !$('#reminder-dialog').open) return;
+  const generation = previewGeneration;
+  $('#cron-preview-status').textContent = 'Sıradaki zamanlar hesaplanıyor…';
+  previewTimer = setTimeout(async () => {
+    const reminder = reminderInput();
+    try {
+      const result = await api('previewSchedule', { reminder });
+      if (generation !== previewGeneration || !$('#reminder-dialog').open) return;
+      $('#cron-preview-status').textContent = 'Sıradaki üç hatırlatma';
+      $('#cron-occurrences').innerHTML = result.occurrences.slice(0, 3).map(at => '<li>' + escapeHTML(new Date(at).toLocaleString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</li>').join('');
+    } catch (error) {
+      if (generation !== previewGeneration || !$('#reminder-dialog').open) return;
+      $('#cron-preview-status').textContent = '';
+      $('#cron-error').textContent = error.message;
+      form.elements.cronExpression.setAttribute('aria-invalid', 'true');
+    }
+  }, 250);
+}
+form.elements.cronExpression.oninput = schedulePreview;
+for (const button of document.querySelectorAll('[data-cron]')) button.onclick = () => {
+  form.elements.cronExpression.value = button.dataset.cron;
+  form.elements.cronExpression.focus(); schedulePreview();
+};
+$('#reminder-dialog').addEventListener('close', cancelPreview);
 function openReminder(reminder) {
   form.reset(); editId = reminder?.id;
   form.elements.id.value = editId || '';
@@ -133,15 +191,21 @@ function openReminder(reminder) {
   form.elements.workHours.checked = Boolean(reminder?.workStart);
   form.elements.workStart.value = reminder?.workStart || '09:00';
   form.elements.workEnd.value = reminder?.workEnd || '18:00';
+  form.elements.cronExpression.value = reminder?.cronExpression || '0 9 * * *';
   if (reminder) {
     for (const key of ['title', 'frequency', 'time', 'monthDay', 'melody']) form.elements[key].value = reminder[key];
     for (const box of $('#weekday-field').querySelectorAll('input')) box.checked = reminder.weekdays.includes(Number(box.value));
+    if (reminder.frequency === 'interval' && reminder.weekdays.length === 7 && !reminder.workStart && !reminder.workEnd) {
+      if (reminder.intervalMinutes === 60) form.elements.frequency.value = 'hourly';
+      if (reminder.intervalMinutes === 120) form.elements.frequency.value = 'two_hourly';
+    }
   } else $('#weekday-field input[value="1"]').checked = true;
-  updateRecurrenceFields(); $('#reminder-dialog').showModal(); form.elements.title.focus();
+  updateRecurrenceFields(); $('#reminder-dialog').showModal(); form.elements.title.focus(); schedulePreview();
 }
 form.elements.frequency.onchange = () => {
   for (const box of $('#weekday-field').querySelectorAll('input')) box.checked = form.elements.frequency.value === 'interval' || box.value === '1';
   updateRecurrenceFields();
+  schedulePreview();
 };
 form.elements.workHours.onchange = updateRecurrenceFields;
 $('#quick-reminder').onclick = () => {
@@ -172,13 +236,7 @@ async function withBusy(button, action, errorTarget) {
 form.onsubmit = e => {
   e.preventDefault(); $('#reminder-error').textContent = '';
   withBusy(form.querySelector('[type="submit"]'), async () => {
-    state = await api('saveReminder', { id: editId, title: form.elements.title.value, frequency: form.elements.frequency.value,
-      time: form.elements.time.value, weekdays: [...$('#weekday-field').querySelectorAll('input:checked')].map(b => Number(b.value)),
-      onceDate: form.elements.onceDate.value, monthDay: Number(form.elements.monthDay.value), melody: form.elements.melody.value,
-      weekInterval: Number(form.elements.weekInterval.value), anchorDate: form.elements.anchorDate.value,
-      intervalMinutes: Number(form.elements.intervalMinutes.value), anchorAt: state.reminders.find(r => r.id === editId)?.anchorAt || Date.now(),
-      ...(form.elements.frequency.value === 'interval' && form.elements.workHours.checked ? { workStart: form.elements.workStart.value, workEnd: form.elements.workEnd.value } : {}),
-      enabled: editId ? (state.reminders.find(r => r.id === editId).nextDue === null || state.reminders.find(r => r.id === editId).enabled) : true });
+    state = await api('saveReminder', reminderInput());
     $('#reminder-dialog').close(); render();
   }, $('#reminder-error'));
 };

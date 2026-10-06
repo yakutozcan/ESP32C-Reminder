@@ -144,3 +144,27 @@ Test takvimi sonunda kapatıldı. I²C yanıtı ve ses görevinin hazır olması
 ekrandaki görüntü veya buzzerın duyulan sesi için fiziksel onay yerine geçmez.
 Fiziksel düğme hareketleri, USB'yi çekerek güç kesintisi, ağ kesintisi ve
 bilgisayarın gerçekten kapalı olduğu senaryo ayrıca doğrulanmalıdır.
+
+
+### Cron güncellemesi için yedek
+
+Firmware 0.7.0 yüklemesi öncesinde kartın 4 MB flash yedeği alındı ve SHA-256
+bütünlük kontrolü geçti. Bu yedek özel, Git dışında tutulan
+`~/Library/Application Support/Masa/device-backups/` klasöründedir. Kalıcı
+donanım yedeklerini `.build/` altında tutma; bu klasör masaüstü derlemesi
+sırasında temizlenebilir.
+
+Yedek öncesindeki kontrolde firmware 0.6.0, bir etkin takvim ve iki geçmiş
+kaydı vardı. Firmware 0.7.0 yüklendi; `protocol:4`, `cron:true`, NTP ile
+`timeValid:true` ve aynı anahtarla HTTP bağlantısı doğrulandı. Takvim sahibi,
+sürümü, etkinliği, zaman imleci, iki geçmiş kaydı ve boş erteleme listesi
+birebir korundu. Mevcut takvim değiştirilmedi. Cron yazılımı, C++ API testleri
+ve 16 JavaScript/C++ zamanlama karşılaştırması geçti; bağımsız cron üretimi
+fiziksel kart üzerinde ayrıca doğrulanacak.
+
+Bu kartta standart yükleme yardımcı programı başlatıldıktan sonra USB yanıtı
+kesildi. `esptool --no-stub` ile yalnızca uygulama alanına yükleme tamamlandı
+ve yazılan verinin hash kontrolü geçti. Bu alternatif, aynı derlemenin
+`firmware.bin` dosyasını `0x10000` adresine yazar; dosya sistemi, NVS,
+bootloader ve bölüm tablosu korunur. Bölüm düzeni farklı bir projede adresi
+ayrıca doğrula.

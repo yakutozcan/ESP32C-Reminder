@@ -219,8 +219,9 @@ void health() {
   if (!authorize()) return;
   if (!queueHealthy) { reply(503, "Persistent queue is corrupt; inspect serial monitor"); return; }
   DynamicJsonDocument doc(1024);
-  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.6.0";
+  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.7.0";
   doc["autonomous"]=autonomous.enabled;doc["timeValid"]=clockTrusted.load();doc["ownerId"]=autonomous.ownerId;doc["revision"]=autonomous.revision;
+  doc["cron"]=true;
   doc["scheduleMaxTimestamp"]=int64_t(sizeof(time_t)>=8?4102444800000LL:2145916800000LL);
   doc["eventsPending"] = events.size();
   doc["sound"] = soundCommands ? "passive-buzzer" : "unavailable";
@@ -327,7 +328,7 @@ String randomKey() {
   return String(key);
 }
 void printStatus() {
-  Serial.println("Masa firmware 0.6.0 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
+  Serial.println("Masa firmware 0.7.0 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
   Serial.println("Pending button events: " + String(events.size()));
   Serial.println("Sound task: " + String(soundCommands ? "ready" : "unavailable"));
   Serial.println("OLED I2C: " + String(oledPresent ? "detected at 0x3C" : "not detected"));

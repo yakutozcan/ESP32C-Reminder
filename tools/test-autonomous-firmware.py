@@ -10,6 +10,12 @@ with tempfile.TemporaryDirectory(prefix="masa-autonomous-test-") as directory:
                     "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
 
+    cron_executable = Path(directory) / "cron-test"
+    subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I",
+                    str(root / "firmware/include"), str(root / "firmware/test/cron_schedule_test.cpp"),
+                    "-o", str(cron_executable)], check=True)
+    subprocess.run([str(cron_executable)], check=True)
+
     dependency = root / "firmware/.pio/libdeps/esp32-c3-oled/ArduinoJson/src"
     if not dependency.is_dir():
         raise SystemExit("Build firmware first (pio run -d firmware) to resolve pinned ArduinoJson for API tests.")
