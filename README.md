@@ -1,5 +1,7 @@
 # Masa · ESP32C-Reminder
 
+<img src="icon.png" alt="Masa uygulama ikonu: yeşil zeminde krem masa saati" width="96" height="96">
+
 **Aklında kalmasın. Masanda dursun.**
 
 [![Checks](https://github.com/yakutozcan/ESP32C-Reminder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yakutozcan/ESP32C-Reminder/actions/workflows/ci.yml)
@@ -25,6 +27,21 @@ bağlantı durumu temsilidir; kişisel veriler içermez.*
 
 [Kurulum](#kurulum) · [Donanım](docs/hardware.md) · [Cihaz protokolü](docs/protocol.md) · [Özellik planı](docs/roadmap.md) · [Katkıda bulun](CONTRIBUTING.md)
 
+## Son eklenenler
+
+| Sürüm | Yenilik |
+| --- | --- |
+| Masa / firmware **0.7.0** | Her gün, Her saat, Her 2 saatte; cron kuralları ve sonraki üç zamanın önizlemesi. |
+| Masa / firmware **0.8.0** | Sürekli açık ekran, ayarlanabilir boşta kapanma ve hatırlatmadan önce/sonra uyanma aralıkları; varsayılan **10/10 dakika**. |
+| Masa **0.8.1** | Uygulamaya özel yeni ikon ve yeniden derlenmiş macOS Apple Silicon paketi; firmware **0.8.0** ile kullanılır. |
+
+6 Ekim 2026 itibarıyla **138 uygulama testi**, firmware kontrolleri ve macOS
+paketinin sürüm/ikon/imza doğrulaması geçti. Gerçek USB kartta 0.8.0 yüklemesi,
+NTP, ekran ayarlarının yeniden başlatmada korunması ve mevcut takvimin korunması
+doğrulandı. OLED, buzzer, düğmeler ve gerçek güç kesintisi için kullanıcı testleri
+[roadmap'te](docs/roadmap.md#fiziksel-testler-ve-paket-kontrolleri) takip edilir.
+İkonun kaynak dosyası ve üretim istemi [tasarım notunda](docs/app-icon.md) bulunur.
+
 ## Özellikler
 
 - **Her gün, Her saat, Her 2 saatte** hazır seçenekleri; haftanın birden fazla günü veya ayın belirli günü.
@@ -36,6 +53,7 @@ bağlantı durumu temsilidir; kişisel veriler içermez.*
 - Bildirim geçmişinden **5 / 15 / 30 dakika** erteleme; tekrar takvimi korunur.
 - Hatırlatıcı ekleme, düzenleme, duraklatma, silme ve silmeyi geri alma.
 - Türkçe ajanda, günlük görünüm ve bildirim geçmişi.
+- Bilgisayar modunda masaüstü bildirimi; sessiz saatlerde bildirim sesi kapanır.
 - Teslimat durumundan ayrı **Yaptım** işaretleme ve günlük **Yapılanlar** görünümü.
 - Cihazda BOOT'a çift basarak tamamlandı, 1 saniye basıp bırakarak 15 dakika erteleme;
   işlemler cihazda saklanır ve uygulamaya bir kez aktarılır (firmware 0.3.0+).
@@ -56,6 +74,17 @@ bağlantı durumu temsilidir; kişisel veriler içermez.*
   önce/sonra açık kalma aralıkları (firmware 0.8.0+).
 - Donanım olmadan denemek için yerel cihaz simülatörü.
 - MIT lisansı ve GitHub Actions ile otomatik kontroller.
+
+## Planlanan özellikler
+
+Sıradaki öneri **arama, etiketler, hatırlatıcı şablonları ve klavye ile hızlı
+ekleme**. Ardından ayarlanabilir bildirim/erteleme, cihaz durum ekranı ve
+otomatik yerel yedekleme planlanıyor. Sonraki aşamalarda haftalık/aylık ajanda,
+CSV/iCalendar aktarımı, uygulama ve firmware güncelleme akışı, birden fazla
+cihaz ve yerel ağdan telefon erişimi değerlendirilecek.
+
+Bunlar henüz uygulanmadı. Öncelikler, kapsam ve tamamlanma ölçütleri
+[yeni özellik roadmap'inde](docs/roadmap.md#yeni-özellik-roadmapi) yer alır.
 
 ## Nasıl çalışır?
 
@@ -153,8 +182,9 @@ veya Node.js sunucusu, npm bağımlılığı ya da hesap gerekmez. Donanım par�
 bağlantı şeması [donanım kılavuzunda](docs/hardware.md) bulunur.
 
 Yazılım ve paketleme hedefi **macOS Apple Silicon**, firmware hedefi yukarıdaki
-ESP32-C3 OLED kartıdır. 0.6.0 bağımsız takvim devri gerçek USB kartta doğrulandı;
-Cron üretimi ve OLED görünürlüğünün fiziksel doğrulaması ayrıca yapılmalıdır. Windows/Linux paketleri ve diğer kart varyantları da ayrıca
+ESP32-C3 OLED kartıdır. Bağımsız takvim devri ve firmware 0.8.0 ekran ayarlarının
+kalıcılığı gerçek USB kartta doğrulandı. Cron üretimi ve OLED görünürlüğünün
+fiziksel doğrulaması ayrıca yapılmalıdır. Windows/Linux paketleri ve diğer kart varyantları da ayrıca
 denenmelidir. Paketleri hedef işletim sisteminde oluştur.
 
 ## Kurulum
@@ -176,8 +206,28 @@ tinyjs build
 ```
 
 macOS’ta `dist/Masa — Hatırlatıcı.app` oluşur. Applications klasörüne taşıyıp
-açabilirsin. İmzalama/notarizasyon için tinyjs belgelerindeki paketleme adımlarını
+açabilirsin. Projedeki `icon.png`, derlemede macOS ikonuna dönüştürülür.
+Mevcut test paketi ad-hoc imzalıdır; dağıtım imzası/notarizasyon için tinyjs belgelerindeki paketleme adımlarını
 uygula. Node.js yalnızca aşağıdaki testler, simülatör ve statik önizleme için gerekir.
+
+### Son yerel test paketleri
+
+6 Ekim 2026'da hazırlanan dosyalar aşağıdadır. `dist/` Git dışında tutulur;
+bu dosyalar çalışma alanındaki derleme çıktılarıdır. Henüz GitHub Release olarak
+yayımlanmış paketler değildir.
+
+| Dosya | Kullanım |
+| --- | --- |
+| `dist/Masa — Hatırlatıcı.app` | Yeni ikonlu Masa 0.8.1; macOS Apple Silicon üzerinde aç. |
+| `dist/Masa-0.8.1-macOS-arm64.zip` | Aynı uygulamanın taşınabilir ZIP paketi. |
+| `dist/Masa-firmware-0.8.0-ESP32C3.bin` | Mevcut kart/bölüm düzeninde `0x10000` adresine yazılan uygulama görüntüsü. |
+| `dist/SHA256SUMS.txt` | ZIP ve firmware dosyasının bütünlük kontrolü. |
+| `dist/TEST-NOTLARI.txt` | Sürekli açık ve kısa uyanma/kapanma denemesi. |
+
+Kartta zaten firmware 0.8.0 varsa ekran ayarlarını doğrudan test edebilirsin.
+**Ayarlar ve yedekler → Ekran** bölümünde önce/sonra sürelerini geçici olarak
+1/1 dakika yapıp en az 3 dakika sonrasına bir deneme hatırlatıcısı kur.
+Test bitince deneme kaydını sil ve tercih ettiğin süreleri geri ayarla.
 
 ### 2. ESP32’ye yazılımı yükle
 
@@ -369,7 +419,7 @@ güvenilen yerel ağ içindir. Cihazın portunu internete açma.
 | Kurulum sayfası açılmıyor | `Masa-XXXX` ağına bağlıyken doğrudan `http://192.168.4.1` adresini aç. |
 | Cihaza ulaşılamıyor | Bilgisayar ile ESP32 aynı yerel ağda olmalı; misafir ağı/istemci izolasyonu ve mDNS yerine cihaz IP’sini kontrol et. |
 | Anahtar uyuşmuyor | Kurulum sayfası veya seri monitördeki `INFO` anahtarını cihaz ayarlarına kopyala. |
-| OLED boş | Boşta 120 saniye sonra kapanır; BOOT'a bas. Görüntü gelmezse GPIO5/GPIO6, `0x3C` ve ofsetleri kontrol et. |
+| OLED boş | Varsayılan olarak boşta 2 dakika sonra kapanır; BOOT'a bas. Ayarlar → Ekran'daki süreleri ve aktarım durumunu kontrol et. Görüntü gelmezse GPIO5/GPIO6, `0x3C` ve ofsetleri kontrol et. |
 | Buzzer sessiz | Pasif buzzer, 5 V besleme, MOSFET ve ortak GND’yi kontrol et; ses tercihi **Kısa melodi** olmalı. |
 | Bildirim geç geliyor | Bilgisayar uyumuş, uygulama kapalı veya cihaz çevrimdışı olabilir; teslimat geçmişini kontrol et. |
 | Bağımsız takvim bekliyor | Firmware 0.6.0 ve aktarım durumunu kontrol et. Yeniden başlatmadan sonra NTP veya Masa ile saati eşitle. |
@@ -404,8 +454,9 @@ testi için C/C++ derleyicisi gerekir. Düğme testi tek/çift basış, basılı
 sekme filtresi ve sayaç taşmasını doğrular. Bağımsız firmware kontrolü saat,
 tekrar ve atomik kayıt davranışlarını denetler. Arayüzün yeni akışları gerçek
 motor ve HTTP simülatörüyle tarayıcıda, çekirdek de native çalışma ortamında
-doğrulanır. Firmware 0.6.0 için fiziksel kart, gerçek OLED/buzzer/düğme, NTP ve
-elektrik kesintisiyle yeniden başlama testleri hâlâ bekliyor.
+doğrulanır. Gerçek kartta NTP, bağımsız tek seferlik üretim, takvim devri ve
+0.8.0 ekran ayarlarının kalıcılığı geçti. Gerçek OLED/buzzer/düğme gözlemi,
+cron üretimi ve elektrik kesintisi senaryoları hâlâ bekliyor.
 
 Firmware bağımlılıkları sabitlenmiştir: ESP32 platformu **6.9.0**,
 ArduinoJson **6.21.5**, U8g2 **2.36.15**, AyresWiFiManager **2.3.0**.
@@ -425,6 +476,20 @@ docs/              Donanım bağlantısı, protokol ve ekran görüntüsü
 
 ## Önceki sürümlerden geçiş
 
+Masa **0.8.0 / 0.8.1**, yerel kayıt biçimi **7** kullanır. Ekran tercihleri
+eklenirken mevcut hatırlatıcılar, sahiplik, geçmiş, sessiz saatler ve cihaz
+ayarları korunur. Geçişten önce eski kayıt `reminder-state-v6-backup` alanına
+alınır; daha eski biçimlerde ilgili sürümün yedeği kullanılır. Yeni ekran ayarları
+taşınabilir JSON yedeğine de dahildir; eski yedeklerde 2 dakika boşta kapanma
+ve 10/10 dakika uyanma varsayılanları uygulanır. Masa 0.8.1 yalnızca ikon/paket
+güncellemesidir; firmware 0.8.0 ve kayıt biçimi 7 ile devam eder.
+
+Masa **0.7.0**, cron desteği için kayıt biçimini **6** yapar; geçiş öncesinde
+biçim 5 kaydı `reminder-state-v5-backup` alanına alınır. Bağımsız cron için
+firmware 0.7.0+, ekran ayarları için firmware 0.8.0+ gerekir.
+
+Aşağıdaki 0.6.0 ve daha eski sürüm notları tarihsel geçişleri kaydeder.
+
 Masa **0.6.0**, yerel kayıt biçimini **5** yapar; mevcut takvimler, teslimat
 kimlikleri, tamamlandı bilgileri ve cihaz ayarları korunur. Biçim 4 kaydı
 dönüşümden önce `reminder-state-v4-backup` alanına alınır; daha eski kayıtta
@@ -442,8 +507,6 @@ eşitlemenin tamamlanmasını bekle; bekleyen cihaz bildirimlerini ve düğme
 olaylarını boşalt, Masa yedeğini al. Eski firmware yeni `/masa-state.json`
 kaydını okuyamaz. Korunan NVS eski bir görüntüdür ve eski bildirimleri yeniden
 gösterebilir; yeni tamamlanma/erteleme bilgileri eski sürüme aktarılmaz.
-
-Aşağıdaki paragraflar önceki sürümlerin tarihsel geçişlerini kaydeder.
 
 Masa **0.4.0**, kayıt biçimini **4** yapar. Teslimat durumu ile işin yapılma durumu
 ayrılır; eski ertelemeler, takvimler ve cihaz ayarları korunur. Geçişten önce mevcut

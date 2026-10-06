@@ -80,7 +80,7 @@ akışları otomatik testlerde, gerçek motorla tarayıcıda ve native çekirdek
 ## 4. Yedekleme ve geri yükleme
 
 - [x] Sürümlü JSON dosyası indirme ve dosyadan içe aktarma.
-- [x] Yalnızca hatırlatıcı tanımları ve sessiz saatleri dışa aktarma; cihaz
+- [x] Hatırlatıcı tanımları, sessiz saatler ve ekran tercihlerini dışa aktarma; cihaz
       adresini, anahtarını, Wi-Fi bilgilerini ve geçmişi dışarıya taşımama.
 - [x] Önce dosyayı doğrulama ve başlık listesini gösterme; birleştirme veya
       mevcut ajandanın yerine koyma seçimi.
@@ -91,7 +91,7 @@ akışları otomatik testlerde, gerçek motorla tarayıcıda ve native çekirdek
 
 **Durum: yazılım tamamlandı.** En fazla 100 hatırlatıcı ve 1 MB dosya kabul edilir;
 bağımsız cihaz modunda toplam 24 hatırlatıcı sınırı uygulanır. Taşınabilir biçim
-`masa-reminders / 1`, güncel yerel kayıt biçimi `6`'tir. İçe aktarma öncesi tam
+`masa-reminders / 1`, güncel yerel kayıt biçimi `7`'dir. İçe aktarma öncesi tam
 kayıt `reminder-import-backup` alanında `{createdAt, state}` olarak saklanır.
 
 ## 5. Bilgisayardan bağımsız cihaz zamanlaması
@@ -196,13 +196,15 @@ aralıkları ve boşta kapanmayı geçersiz kılar. BOOT ve aktif bildirimler ö
 - [x] Masa 0.8.1 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
       paket sürümü ve imzasının doğrulanması.
 - [x] Masa'ya özel krem/yeşil masa saati ikonu; şeffaf PNG kaynak ve macOS ICNS paketi.
+- [x] Masa 0.8.1 ZIP ve firmware 0.8.0 BIN test çıktıları; SHA-256 listesi ve kısa test notları.
 - [x] Gerçek USB kartta yükleme, NTP, bağımsız takvim, yeniden başlatma ve
       uygulamayla devir/eşitleme. Ayrıntılar [donanım kaydında](hardware.md#usb-kart-doğrulaması--6-ekim-2026).
 
-## Sıradaki işler
+## Fiziksel testler ve paket kontrolleri
 
-Yeni yazılım özelliği beklemiyor. Kalan işler fiziksel doğrulama ve paket
-kullanım kontrolleridir; henüz yapılmayan kontroller tamamlandı sayılmaz.
+Mevcut 0.8.1 / 0.8.0 sürümünün kalan kontrolleri aşağıdadır. Yeni özellikler
+sonraki bölümde öneri olarak planlanmıştır; henüz yapılmayan kontroller
+tamamlandı sayılmaz.
 
 1. Mevcut takvimi koruyarak ayrı fiziksel cron üretimi ve yeniden başlatma testi.
 2. OLED'deki Türkçe test yazısı ve bağlı buzzerın melodisi için fiziksel onay.
@@ -220,5 +222,115 @@ kullanım kontrolleridir; henüz yapılmayan kontroller tamamlandı sayılmaz.
    gerçek kartta doğrulandı.
 7. Derlenen macOS uygulamasının native penceresinde son kullanım kontrolü;
    diğer işletim sistemleri ve Intel Mac paketlerinin ayrıca derlenip denenmesi.
+
+## Yeni özellik roadmap'i
+
+6 Ekim 2026 önerileri. Aşağıdaki maddeler henüz uygulanmadı; sürüm ve tarih
+taahhüdü değildir. P1 bir sonraki geliştirme grubu, P2 sonraki grup, P3 kapsam
+kararı gerektiren daha büyük işlerdir. Önce kullanıcının mevcut paketle yaptığı
+testte çıkan hatalar giderilir; sonra **9. aşama** ile başlanması önerilir.
+
+| Aşama | Öncelik | Kullanıcıya katkısı | Etkilenen alan |
+| --- | --- | --- | --- |
+| 9. Hızlı kullanım | P1 | Hatırlatıcıları daha hızlı bulma ve oluşturma | Masaüstü |
+| 10. Bildirim tercihleri | P1 | Ses, erteleme ve bildirimden işlem yapma | Masaüstü + firmware |
+| 11. Cihaz durumu ve otomatik yedek | P1 | Bağlantı sorununu anlama ve kolay geri dönme | Masaüstü + firmware |
+| 12. Ajanda ve takvim aktarımı | P2 | Haftayı görme, başka takvimlerle dosya alışverişi | Masaüstü |
+| 13. Güncelleme ve dağıtım | P2 | Yeni sürümü kolay kurma; USB gereksinimini azaltma | Paketleme + firmware |
+| 14. Birden fazla cihaz ve telefon erişimi | P3 | Farklı masaları yönetme, telefondan düzenleme | Veri modeli + yerel ağ |
+
+### 9. Hızlı kullanım ve düzenleme
+
+- [ ] Başlığa göre arama; etkin/duraklatılmış, tekrar türü ve etikete göre filtreleme.
+- [ ] İş, kişisel ve rutin gibi kullanıcı tarafından belirlenen etiketler.
+- [ ] Hatırlatıcıyı çoğaltma ve tekrar kullanılabilir şablon kaydetme; örneğin
+      su içme, mola ve günlük kontrol şablonları ilk kullanımda isteğe bağlı sunulur.
+- [ ] Uygulama içinde yeni hatırlatıcı ve aramaya odaklanma kısayolları;
+      formun klavyeyle tamamlanması ve kısayolların görünür yardım metni.
+
+**Tamamlanma ölçütü:** arama ve filtreleme birlikte çalışır; çoğaltma yeni kimlik
+oluşturur ve eski geçmişi kopyalamaz. Eski kayıtlar etiketsiz olarak açılır,
+şablonlar/yeni alanlar yedekten geri gelir. Bağımsız cihazın 24 hatırlatıcı sınırı
+korunur. İlk kapsam masaüstüdür; cihazda etiket gösterimi bu aşamaya dahil değildir.
+
+### 10. Ayarlanabilir bildirim ve erteleme
+
+- [ ] Mevcut masaüstü bildirimine tıklayınca ilgili kaydı açma; platform
+      desteğine göre bildirimden Yaptım ve Ertele işlemleri.
+- [ ] Ayarlardan varsayılan erteleme süresi; mevcut 5/15/30 dakika seçimlerini koruma.
+- [ ] Cihazda erteleme süresini ayarlama; BOOT hareketlerini değiştirmeden uygulama
+      ve cihazdaki tercihi eşitleme.
+- [ ] Mevcut kısa melodi/sessiz seçimine ek olarak birkaç melodi ve sınırlı
+      tekrar sayısı; kaydetmeden önce kısa ses denemesi.
+
+**Tamamlanma ölçütü:** aynı bildirim eylemi iki kez uygulanmaz; sessiz saatler
+her melodide korunur. Bağımsız erteleme bilgisayar kapalıyken de seçilen süreyi
+kullanır ve yeniden başlatmada saklanır. Native bildirim düğmeleri imzalı macOS
+paketinde doğrulanır; desteklenmeyen platformda ajandadan mevcut işlemler sürer.
+
+### 11. Cihaz durum ekranı ve otomatik yerel yedek
+
+- [ ] Tek panelde firmware/protokol, son erişim, güvenilir saat, takvim aktarımı,
+      bekleyen işler ve ekran ayarı aktarım durumu.
+- [ ] Firmware'den çalışma süresi, Wi-Fi sinyal seviyesi ve depolama durumunu alma;
+      eski firmware'de bulunmayan alanları açıkça gösterme.
+- [ ] Cihaz anahtarı ve Wi-Fi bilgisi içermeyen tanılama raporu indirme.
+- [ ] Kullanıcının seçtiği yerel klasöre günlük veya değişiklik sonrası yedek;
+      saklanacak kopya sayısı ve son başarılı yedek zamanı.
+- [ ] Mevcut içe aktarma önizlemesiyle otomatik yedeklerden geri yükleme.
+
+**Tamamlanma ölçütü:** çevrimdışı cihaz ve yazılamayan yedek klasörü kullanıcıya
+açıkça gösterilir; başarısız yeni yedek eski başarılı kopyayı silmez. Yedekler
+geçerli taşınabilir biçimde açılır; tanılama çıktısı cihaz sırlarını içermez.
+
+### 12. Haftalık/aylık ajanda, geçmiş ve takvim dosyaları
+
+- [ ] Haftalık ve aylık takvim; seçilen günün hatırlatıcılarını gösterme.
+- [ ] Geçmişi tarih aralığına göre filtreleme; yapıldı/ertelendi/bekleyen sayıları
+      ve tamamlanma oranını yerel veriden hesaplama.
+- [ ] Görüntülenen geçmişi CSV olarak dışa aktarma; cihaz adresi/anahtarını eklememe.
+- [ ] `.ics` dosyasından desteklenen tek seferlik/günlük/haftalık/aylık
+      hatırlatmaları önizleyerek alma; ajandayı `.ics` olarak dışa aktarma.
+
+**Tamamlanma ölçütü:** istatistikler mevcut geçmişin saklama sınırını belirtir;
+geçmişin bulunmadığı günler tamamlandı kabul edilmez. iCalendar aktarımı
+`UID`, saat dilimi ve yaz saati sınırlarını korur. Desteklenmeyen tekrarlar ve
+cron'un doğrudan çevrilemeyen kuralları kullanıcıya gösterilir; sessizce farklı
+bir takvime dönüştürülmez. İlk kapsam dosya aktarımıdır; hesap bağlantıları ayrı
+değerlendirilir. Dosya biçiminin temeli [RFC 5545 iCalendar](https://www.rfc-editor.org/info/rfc5545/).
+
+### 13. Güncelleme ve dağıtım
+
+- [ ] GitHub Release için masaüstü/firmware paketleri, sürüm notları ve SHA-256 listesi.
+- [ ] macOS dağıtım imzası ve notarizasyon; Intel Mac, Windows ve Linux için
+      ayrı derleme ve hedef sistemde kullanım testleri.
+- [ ] Uygulamadan yeni masaüstü sürümünü kontrol etme; sürüm notunu göstererek
+      kullanıcının başlattığı güncelleme ve başarısız kurulumdan geri dönme.
+- [ ] Firmware için önce 4 MB flash kapasitesi, bölüm düzeni ve kullanılan
+      Arduino/ESP-IDF sürümüyle OTA/geri dönüş uygulanabilirliğini doğrulama.
+- [ ] Ardından yerel ağdan kimlik doğrulamalı, imzalı firmware yükleme;
+      sürüm uyumluluğu, aktarım ilerlemesi ve açılış sonrası sağlık kontrolü.
+
+**Tamamlanma ölçütü:** hatalı veya yetkisiz paket uygulanmaz; ağ/güç kesintisi
+testlerinde cihaz açılabilir kalır, takvim ve Wi-Fi/anahtar korunur. Bölüm düzeni
+değişecekse geçiş ve USB kurtarma adımı ayrıca hazırlanır. ESP32-C3 OTA için
+iki uygulama yuvası ve OTA veri bölümü gerekir; geri dönüş de bootloader
+yapılandırmasına bağlıdır. Bu nedenle mevcut `firmware.bin` dosyasını kablosuz
+göndermek tek başına yeterli kabul edilmez. [Espressif OTA ve geri dönüş belgesi](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32c3/api-reference/system/ota.html).
+
+### 14. Birden fazla cihaz ve yerel ağdan telefon erişimi
+
+- [ ] Her cihaz için ayrı ad, bağlantı, ekran tercihleri ve takvim sahipliği.
+- [ ] Hatırlatıcıyı bir cihaza atama; birden çok cihaza gönderme ihtiyacını
+      ayrıca değerlendirip yinelenen bildirim davranışını belirleme.
+- [ ] Telefonda yerel ağ üzerinden ajandayı görüntüleme ve düzenleme;
+      ilk kapsam bilgisayarın sunduğu, eşleştirmeli mobil arayüz.
+- [ ] Aynı kaydın iki istemcide düzenlenmesi için çatışma gösterimi; cihaz
+      başına takvim devri ve çevrimdışı eşitleme.
+
+**Tamamlanma ölçütü:** bir cihazın kopması diğerine aktarımı engellemez;
+sahiplik ve 24 hatırlatıcı sınırı cihaz başına korunur. Telefon erişimi açıkça
+etkinleştirilir ve bilgisayar açıkken kullanılabilir; mevcut tek cihaz kaydı
+veri kaybetmeden taşınır. Bu aşama ayrı veri modeli tasarımı gerektirir.
 
 README ve protokol belgeleri güncel davranışı ve geçiş sınırlarını kaydeder.
