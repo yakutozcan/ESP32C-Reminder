@@ -6,10 +6,13 @@ void sendDisplay(bool accepted=false) {
   String body;serializeJson(document,body);server.send(200,"application/json",body);
 }
 void getDisplay() {
-  if(!authorize())return;if(!queueHealthy){reply(503,"Persistent state is corrupt");return;}sendDisplay();
+  if(!authorize())return;
+  if(!queueHealthy){reply(503,"Persistent state is corrupt");return;}
+  sendDisplay();
 }
 void putDisplay() {
-  if(!authorize())return;if(!queueHealthy){reply(503,"Persistent state is corrupt");return;}
+  if(!authorize())return;
+  if(!queueHealthy){reply(503,"Persistent state is corrupt");return;}
   const String body=server.arg("plain");if(body.length()>2048){reply(413,"Display payload too large");return;}
   DynamicJsonDocument document(3072);masa::DisplaySettings settings;
   if(deserializeJson(document,body)||!parseDisplaySettings(document["settings"].as<JsonObject>(),settings)||!document.containsKey("nextDue")||!validMillis(document["nextDue"],true)||!validMillis(document["utcNow"])) {reply(400,"Invalid display settings");return;}

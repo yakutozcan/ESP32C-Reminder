@@ -38,7 +38,7 @@ int readMinute(JsonVariant value) {
   if(s.length()!=5 || s[2]!=':' || s[0]<'0'||s[0]>'2'||s[1]<'0'||s[1]>'9'||s[3]<'0'||s[3]>'5'||s[4]<'0'||s[4]>'9')return -1;
   int m=(s[0]-'0')*600+(s[1]-'0')*60+(s[3]-'0')*10+s[4]-'0';return m<1440?m:-1;
 }
-String minuteText(int minute) {char text[6];snprintf(text,sizeof(text),"%02d:%02d",minute/60,minute%60);return String(text);}
+String minuteText(int minute) {char text[16];snprintf(text,sizeof(text),"%02d:%02d",minute/60,minute%60);return String(text);}
 bool validTitle(const String& text) {
   if(!text.length()||text.length()>320)return false;
   size_t count=0;bool visible=false;

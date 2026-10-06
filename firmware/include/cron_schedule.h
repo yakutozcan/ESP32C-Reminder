@@ -32,7 +32,8 @@ inline bool cronField(const char* begin,const char* end,int low,int high,uint64_
     if(begin<end&&*begin=='/') {++begin;if(!cronNumber(begin,end,step)||step<1)return false;}
     for(int64_t number=first;number<=last;) {
       mask|=uint64_t(1)<<(weekday&&number==7?0:number);
-      if(last-number<step)break;number+=step;
+      if(last-number<step)break;
+      number+=step;
     }
     if(begin==end)return mask!=0;
     if(*begin++!=','||begin==end)return false;
@@ -48,15 +49,18 @@ inline bool parseCron(const char* expression,CronRule& rule) {
     while(*cursor==' '||*cursor=='\t')++cursor;
     const char* first=cursor;while(*cursor&&*cursor!=' '&&*cursor!='\t')++cursor;
     if(first==cursor||!cronField(first,cursor,low[field],high[field],parsed.masks[field],field==4))return false;
-    if(field==2)parsed.domStar=*first=='*';if(field==4)parsed.dowStar=*first=='*';
+    if(field==2)parsed.domStar=*first=='*';
+    if(field==4)parsed.dowStar=*first=='*';
   }
-  while(*cursor==' '||*cursor=='\t')++cursor;if(*cursor)return false;
+  while(*cursor==' '||*cursor=='\t')++cursor;
+  if(*cursor)return false;
   // Under Vixie's OR rule a selected weekday always makes a month feasible.
   // Otherwise at least one selected calendar date must exist (leap years included).
   bool feasible=!parsed.domStar&&!parsed.dowStar;
   for(int month=1;!feasible&&month<=12;++month)if(parsed.masks[3]&(uint64_t(1)<<month))
     for(int day=1;day<=cronMonthDays(2000,month);++day)if(parsed.masks[2]&(uint64_t(1)<<day))feasible=true;
-  if(!feasible)return false;rule=parsed;return true;
+  if(!feasible)return false;
+  rule=parsed;return true;
 }
 inline int64_t cronCivilDay(int year,unsigned month,unsigned day) {
   year-=month<=2;const int era=(year>=0?year:year-399)/400;const unsigned y=unsigned(year-era*400);
@@ -115,7 +119,8 @@ inline int64_t nextCronBounded(const CronRule& rule,int64_t after,int64_t maximu
   }
   while(cronCivilDay(date.tm_year+1900,date.tm_mon+1,date.tm_mday)<=lastDay) {
     const int64_t candidate=cronOnDate(rule,date,after,maximum,false);
-    if(candidate)return candidate;cronAdvanceDate(date,1);
+    if(candidate)return candidate;
+    cronAdvanceDate(date,1);
   }
   return 0;
 }
@@ -127,11 +132,13 @@ inline int64_t nextCron(const CronRule& rule,int64_t after) {
 }
 inline int64_t latestCron(const CronRule& rule,int64_t first,int64_t now) {
   if(!first||first>now)return 0;
-  const int64_t lower=std::max(first-1,now-86400000LL);
+  const int64_t lower=std::max<int64_t>(first-1,now-86400000LL);
   tm date=cronLocal(now);const tm earliest=cronLocal(lower+1);
   const int64_t firstDay=cronCivilDay(earliest.tm_year+1900,earliest.tm_mon+1,earliest.tm_mday);
   while(cronCivilDay(date.tm_year+1900,date.tm_mon+1,date.tm_mday)>=firstDay) {
-    const int64_t due=cronOnDate(rule,date,lower,now,true);if(due)return due;cronAdvanceDate(date,-1);
+    const int64_t due=cronOnDate(rule,date,lower,now,true);
+    if(due)return due;
+    cronAdvanceDate(date,-1);
   }
   return 0;
 }

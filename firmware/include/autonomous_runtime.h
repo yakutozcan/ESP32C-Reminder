@@ -149,7 +149,7 @@ void drawIdle(uint32_t now) {
   if(!clockTrusted){drawLines("Saat eşitle Bekleniyor  Masa'yı aç",0);return;}
   const int64_t utc=utcMillis();const tm local=masa::local(utc);
   if(!idleState.showDetails(now)) {
-    char time[6],date[16];
+    char time[6],date[40];
     snprintf(time,sizeof(time),"%02d:%02d",local.tm_hour,local.tm_min);
     snprintf(date,sizeof(date),"%02d.%02d.%04d",local.tm_mday,local.tm_mon+1,local.tm_year+1900);
     drawIdleClock(time,date);return;
