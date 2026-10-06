@@ -89,7 +89,7 @@ test('v1 migration preserves schedules, device key and queued IDs without mutati
   const before = JSON.stringify(legacy);
   const f = fixture({ state: legacy });
   const migrated = f.engine.snapshot();
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.deepEqual(migrated.device, legacy.device);
   assert.equal(migrated.reminders[0].nextDue, legacy.reminders[0].nextDue);
   assert.equal(migrated.reminders[0].melody, 'chime');
@@ -234,6 +234,6 @@ test('v2 migration adds user outcomes and leaves its backup intact', () => {
     jobs: [{ id: 'old:stable', status: 'queued', melody: 'none', due: 100, retryAt: 101, attempts: 3 }],
     device: { url: 'http://device', token: 'kept-private' } };
   const before = JSON.stringify(legacy);
-  assert.deepEqual(migrateState(legacy), { ...newState(), ...legacy, version: 6, deviceEvents: [], jobs: legacy.jobs.map(j => ({ ...j, rootId: j.id, outcome: 'pending' })) });
+  assert.deepEqual(migrateState(legacy), { ...newState(), ...legacy, version: 7, deviceEvents: [], jobs: legacy.jobs.map(j => ({ ...j, rootId: j.id, outcome: 'pending' })) });
   assert.equal(JSON.stringify(legacy), before);
 });

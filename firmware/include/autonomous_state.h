@@ -132,3 +132,5 @@ bool parseState(JsonObject obj,AutonomousState& state,bool storage=false) {
   if(storage){if(!obj["history"].is<JsonArray>()||obj["history"].size()>32)return false;for(JsonObject item:obj["history"].as<JsonArray>()){AutonomousJob job;if(!parseJob(item,job)||job.status!="delivered")return false;for(const auto& old:state.history)if(old.id==job.id)return false;for(const auto& old:state.deferred)if(old.id==job.id)return false;state.history.push_back(job);}state.fingerprint=obj["fingerprint"]|"";}
   return true;
 }
+
+#include "display_state.h"

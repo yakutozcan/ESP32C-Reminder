@@ -15,7 +15,7 @@ ile kısa bir melodi çalar. Her hatırlatıcı için sessiz bildirim de seçile
 Masaüstü uygulaması [tinyjsapp](https://github.com/tarwin/tinyjsapp), cihazın Wi-Fi
 kurulumu [AyresWiFiManager](https://registry.platformio.org/libraries/ayresnet/AyresWiFiManager)
 kullanır. Takvim ve veriler bilgisayarında saklanır; ayrı bir sunucu veya bulut
-hesabı gerekmez. **Masa 0.7.0 / firmware 0.7.0** ile takvimi cihaza aktarıp
+hesabı gerekmez. **Masa 0.8.0 / firmware 0.8.0** ile takvimi cihaza aktarıp
 bilgisayar kapalıyken de hatırlatmasını sağlayabilirsin.
 
 ![Masa ajandası: günlük, haftalık ve aylık örnek hatırlatıcılar](docs/images/masa-agenda.jpg)
@@ -51,7 +51,9 @@ bağlantı durumu temsilidir; kişisel veriler içermez.*
 - Bilgisayarda kalıcı gönderim kuyruğu ve bağlantı kesilince yeniden deneme.
 - Cihazda kalıcı kuyruk ve aynı bildirimin yeniden gönderilmesini ayırt etme.
 - Küçük OLED’de uzun notları sayfalama; BOOT’a kısa basarak bildirimi kapatma.
-- Boşta saat, sıradaki not ve kalan süre; otomatik kısılma/kapanma ve BOOT ile uyanma.
+- Boşta saat, sıradaki not ve kalan süre; BOOT ile uyanma.
+- Ayarlardan **ekranı sürekli açık tutma**, boşta kapanma süresi ve hatırlatmadan
+  önce/sonra açık kalma aralıkları (firmware 0.8.0+).
 - Donanım olmadan denemek için yerel cihaz simülatörü.
 - MIT lisansı ve GitHub Actions ile otomatik kontroller.
 
@@ -110,7 +112,30 @@ ile uyumludur. Cron alanı hatırlatmanın zamanını belirler; komut alanı bul
 
 Bağımsız cihazda cron için firmware **0.7.0+** gerekir. Eski firmware ile
 günlük/aralıklı takvim devam eder; cron ekleme veya aktarma öncesinde uygulama
-güncelleme ister. Yerel kayıt biçimi 6'ya geçirilmeden önce mevcut kayıt yedeklenir.
+güncelleme ister. Yerel kayıt biçimi 7'ye geçirilmeden önce mevcut kayıt yedeklenir.
+
+## Ekran ayarları
+
+**Ayarlar ve yedekler → Ekran** bölümünde:
+
+- **Ekranı sürekli açık tut:** zamanlama ve boşta kapanma süresinden bağımsız açık kalır.
+- **Boştayken kapanma süresi:** 1–1440 dakika; varsayılan 2 dakika. Sürenin yarısında ekran kısılır.
+- **Hatırlatmadan önce uyan:** 0–1440 dakika; varsayılan 10 dakika.
+- **Hatırlatmadan sonra açık kal:** 0–1440 dakika; varsayılan 10 dakika.
+
+Örneğin 15:00 hatırlatması için varsayılan aralık 14:50–15:10'dur. Önce veya
+sonra süresini 0 yaparak o aralığı kapatabilirsin. Sürekli açık seçeneğini
+kapattığında kaydettiğin süreler yeniden uygulanır. Bildirimler ve BOOT ekranı
+her zaman uyandırır; yakın hatırlatmaların aralıkları birleşir.
+
+Tercihler cihaza kalıcı olarak aktarılır ve yedeğe dahil edilir. Bağlantı
+kesikse uygulama yerel kaydı korur ve aktarım beklediğini gösterir. Bilgisayar
+modunda sıradaki hatırlatma zamanı Masa açıkken cihaza aktarılır; bağımsız
+modda cihaz kendi takvimini kullanır. Zamanlı uyanma için cihazın güvenilir
+saati gerekir; sürekli açık seçeneği saat eşitlenmeden de çalışır.
+
+Bu bölüm için firmware **0.8.0+** gerekir. Eski firmware diğer özelliklerle
+çalışmaya devam eder; ekran ayarlarının aktarılmadığı açıkça gösterilir.
 
 ## Gereksinimler
 
@@ -129,7 +154,7 @@ bağlantı şeması [donanım kılavuzunda](docs/hardware.md) bulunur.
 
 Yazılım ve paketleme hedefi **macOS Apple Silicon**, firmware hedefi yukarıdaki
 ESP32-C3 OLED kartıdır. 0.6.0 bağımsız takvim devri gerçek USB kartta doğrulandı;
-0.7.0 cron desteğinin fiziksel kart doğrulaması ayrıca yapılmalıdır. Windows/Linux paketleri ve diğer kart varyantları da ayrıca
+Cron üretimi ve OLED görünürlüğünün fiziksel doğrulaması ayrıca yapılmalıdır. Windows/Linux paketleri ve diğer kart varyantları da ayrıca
 denenmelidir. Paketleri hedef işletim sisteminde oluştur.
 
 ## Kurulum

@@ -3,11 +3,11 @@
 Başlangıç: 5 Ekim 2026. Özellikler mevcut yerel çalışma modelini koruyarak,
 her aşamada kullanılabilir ve doğrulanmış bir sürüm oluşturacak şekilde eklenir.
 
-**Güncel durum: 6 Ekim 2026, Masa 0.7.0 / firmware 0.7.0.** İlk altı aşamanın
-yazılımı tamamlandı; kolay tekrarlar ve cron 7. aşamada eklendi. 123 uygulama
-testi, firmware testleri ve 0.7.0 macOS paketinin sürüm/imza kontrolü geçti.
-Kartın tam yedeği alındı; firmware 0.7.0 yüklendi, cron özelliği ve mevcut
-takvim/bağlantı/geçmişin korunduğu doğrulandı.
+**Güncel durum: 6 Ekim 2026, Masa 0.8.0 / firmware 0.8.0.** İlk altı aşamanın
+yazılımı tamamlandı; kolay tekrarlar ve cron 7. aşamada eklendi. 138 uygulama
+testi, firmware testleri ve 0.8.0 macOS paketinin sürüm/imza kontrolü geçti.
+Kartın tam yedeği alındı; firmware 0.8.0 yüklendi. Ekran ayarlarının yeniden
+başlatma sonrası kalıcılığı ve mevcut takvim/bağlantı/geçmişin korunması doğrulandı.
 İlk iki aşama kendi tarihsel sürümlerini kaydeder; donanım doğrulaması ve kalan
 işler aşağıda ayrı belirtilir.
 
@@ -166,16 +166,34 @@ mevcut takvimin sahipliği/sürümü, bir zaman imleci ve iki geçmiş kaydı y�
 sonrasında aynen korundu. Cron için cihazın `cron:true` yanıtı doğrulandı;
 fiziksel kartta bir cron bildiriminin zamanında üretilmesi ayrıca test edilecek.
 
+## 8. Ayarlanabilir OLED uyanma ve kapanma
+
+- [x] Ekranı sürekli açık tutma seçeneği.
+- [x] 1–1440 dakika boşta kapanma; sürenin yarısında kısılma.
+- [x] Hatırlatmadan önce/sonra 0–1440 dakika açık kalma; varsayılan 10/10 dakika.
+- [x] Sıfırla aralığı kapatma; yakın tekrarlar, erteleme, düzenleme ve iptal davranışı.
+- [x] Bilgisayar ve bağımsız modda ayrı ekran ayarı aktarımı; sahiplik değişmez.
+- [x] Kalıcı cihaz kaydı, yedekleme ve kayıt biçimi 6 → 7 öncesi geri dönüş yedeği.
+- [x] Arayüzde aktarım, çevrimdışı ve eski firmware durumunu açıkça gösterme.
+- [x] Uygulama, gerçek firmware API/politika testleri ve geniş/dar arayüz kontrolü.
+- [x] Masa 0.8.0 macOS Apple Silicon paketinin derlenmesi ve imza/sürüm kontrolü.
+- [x] Firmware 0.8.0 USB yüklemesi ve cihazda ayarların yeniden başlatma sonrası kalıcılığı.
+- [x] Gerçek kartta varsayılanlar, ayar yazma/okuma, hatalı değer reddi ve takvimin korunması.
+
+**Durum: yazılım, paket ve USB ayar doğrulaması tamamlandı (Masa/firmware 0.8.0).** Varsayılan 15:00
+hatırlatması ekranı 14:50–15:10 açık tutar. Sürekli açık seçeneği zamanlı
+aralıkları ve boşta kapanmayı geçersiz kılar. BOOT ve aktif bildirimler önceliklidir.
+
 ## Son doğrulama ve paket
 
-- [x] 123 uygulama testi; eski kayıt geçişleri, takvim/DST, yedekleme, sahiplik,
+- [x] 138 uygulama testi; eski kayıt geçişleri, takvim/DST, yedekleme, sahiplik,
       kaybolan yanıtlar ve çevrimdışı erteleme senaryoları.
 - [x] Firmware derlemesi; OLED/düğme C++ testleri, takvim/atomik depolama ve
       gerçek firmware başlıklarıyla API testleri.
 - [x] Gerçek motor ve HTTP simülatörüyle dar/geniş tarayıcı akışları; kaybolan
       kapatma yanıtı sonrası güvenli yeniden eşitleme.
 - [x] tinyjs'in native çekirdeğinde cron/takvim, sessiz saatler, yedekleme ve sahiplik.
-- [x] Masa 0.7.0 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
+- [x] Masa 0.8.0 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
       paket sürümü ve imzasının doğrulanması.
 - [x] Gerçek USB kartta yükleme, NTP, bağımsız takvim, yeniden başlatma ve
       uygulamayla devir/eşitleme. Ayrıntılar [donanım kaydında](hardware.md#usb-kart-doğrulaması--6-ekim-2026).
@@ -195,8 +213,10 @@ kullanım kontrolleridir; henüz yapılmayan kontroller tamamlandı sayılmaz.
    başlatması bu güç kesintisi testinin yerine geçmez.
 5. Bilgisayar gerçekten kapalıyken ve ağ kesildiğinde cihazın çalışması;
    yeniden bağlanınca geçmiş ve eylemlerin doğru eşitlenmesi.
-6. Boşta OLED'in 60 saniyede kısılması, 120 saniyede kapanması, BOOT ve yeni
-   bildirimle uyanması.
+6. OLED'in sürekli açık seçeneği, ayarlanmış boşta kısılma/kapanma, BOOT ile
+   uyanma ve gerçek hatırlatmanın 10 dakika öncesi/sonrası aralığı için görsel
+   fiziksel kontrol. Sınırlar ve öncelikler C++ testlerinde, ayarların kalıcılığı
+   gerçek kartta doğrulandı.
 7. Derlenen macOS uygulamasının native penceresinde son kullanım kontrolü;
    diğer işletim sistemleri ve Intel Mac paketlerinin ayrıca derlenip denenmesi.
 

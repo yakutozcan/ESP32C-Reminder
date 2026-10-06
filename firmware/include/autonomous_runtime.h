@@ -17,6 +17,7 @@ void sendSchedule(bool accepted=false) {
 }
 void getSchedule() {if(!authorize())return;if(!queueHealthy){reply(503,"Persistent state is corrupt");return;}sendSchedule();}
 void trustDesktopTime(int64_t now) {timeval time{};time.tv_sec=now/1000;time.tv_usec=(now%1000)*1000;if(settimeofday(&time,nullptr)==0)clockTrusted=true;}
+#include "display_runtime.h"
 void putSchedule() {
   if(!authorize())return;
   if(!queueHealthy){reply(503,"Persistent state is corrupt");return;}
@@ -120,12 +121,12 @@ bool enqueueAutonomous(AutonomousJob job,int64_t now) {
   if(duplicate){for(const auto& old:queue)if(old.id==job.id){appendHistory(job);break;}return true;}
   if(queue.size()>=QUEUE_LIMIT)return false;
   tm time=masa::local(now);const bool quiet=masa::quietAt(time.tm_hour*60+time.tm_min,autonomous.quietEnabled,autonomous.quietStart,autonomous.quietEnd);
-  queue.push_back({job.id,job.title,job.melody=="chime"&&!quiet});appendHistory(job);return true;
+  queue.push_back({job.id,job.title,job.melody=="chime"&&!quiet});appendHistory(job);markDisplayNotice();return true;
 }
 void tickAutonomous() {
   static uint32_t last=0;
   if(!autonomous.enabled||!clockTrusted||!queueHealthy||millis()-last<1000)return;
-  last=millis();const int64_t now=utcMillis();const auto oldState=autonomous;const auto oldQueue=queue;bool changed=false;
+  last=millis();const int64_t now=utcMillis();const auto oldState=autonomous;const auto oldQueue=queue;const auto oldDisplay=displayState;bool changed=false;
   for(auto& r:autonomous.reminders) {
     if(!r.enabled||!r.nextDue||r.nextDue>now)continue;
     const int64_t due=masa::latestDue(r.recurrence,r.nextDue,now);
@@ -140,15 +141,15 @@ void tickAutonomous() {
     if(it->expiresAt>now&&!enqueueAutonomous(*it,now)){++it;continue;}
     it=autonomous.deferred.erase(it);changed=true;
   }
-  if(changed&&!saveQueue()){autonomous=oldState;queue=oldQueue;Serial.println("Autonomous state persistence failed; retrying");}
+  if(changed&&!saveQueue()){autonomous=oldState;queue=oldQueue;displayState=oldDisplay;Serial.println("Autonomous state persistence failed; retrying");}
 }
 void drawIdle(uint32_t now) {
   if(!queueHealthy){oled.setPowerSave(0);drawLines("Depo hatası Seri monitör kontrol et",0);return;}
-  const unsigned contrast=idleState.contrast(now);oled.setPowerSave(contrast==0);if(!contrast)return;oled.setContrast(contrast);
+  const unsigned contrast=idleDisplayContrast(now);oled.setPowerSave(contrast==0);if(!contrast)return;oled.setContrast(contrast);
   if(!clockTrusted){drawLines("Saat eşitle Bekleniyor  Masa'yı aç",0);return;}
   const int64_t utc=utcMillis();const tm local=masa::local(utc);const unsigned page=idleState.page(now);
   int64_t next=0;String title;
-  if(autonomous.enabled){for(const auto& r:autonomous.reminders)if(r.enabled&&r.nextDue&&(next==0||r.nextDue<next)){next=r.nextDue;title=r.title;}for(const auto& job:autonomous.deferred)if(next==0||job.due<next){next=job.due;title=job.title;}}
+  if(autonomous.enabled){for(const auto& r:autonomous.reminders)if(r.enabled&&r.nextDue&&(next==0||r.nextDue<next)){next=r.nextDue;title=r.title;}for(const auto& job:autonomous.deferred)if(next==0||job.due<next){next=job.due;title=job.title;}}else next=displayState.nextDue;
   if(page==0){char text[48];snprintf(text,sizeof(text),"%02d:%02d       %02d.%02d.%04d",local.tm_hour,local.tm_min,local.tm_mday,local.tm_mon+1,local.tm_year+1900);drawLines(text,0);}
   else if(page==1)drawLines(title.length()?String("Sıradaki:   ")+title:autonomous.enabled?"Takvim hazırBekleyen yok":"Masa hazır  Masa'dan    bekleniyor",0);
   else if(page==2){if(next){int64_t minutes=std::max(int64_t(0),(next-utc+59999)/60000);drawLines("Kalan süre: "+String(double(minutes),0)+" dakika",0);}else drawLines("Bekleyen    hatırlatma  yok",0);}

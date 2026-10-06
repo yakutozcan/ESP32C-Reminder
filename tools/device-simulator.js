@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { validateSettings, deviceDisplaySettings } from '../src/core/settings.js';
+import { validateDisplayReply } from '../src/core/device.js';
 import { randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { DAY, validateReminder, validateQuietHours, nextAfter, latestDue, isQuietAt, deviceTimezone } from '../src/core/schedule.js';
@@ -68,9 +70,10 @@ function validateSchedule(input) {
     quietHours, reminders, deferred, completedRoots, cancelledIds };
 }
 export function createSimulator({ token = process.env.DEVICE_TOKEN || 'local-simulator-token-12345678',
-  onNotice = console.log, protocol = 4, cron = true, state: saved, persist = () => true, clock = Date.now } = {}) {
+  onNotice = console.log, protocol = 4, cron = true, displaySettings = true, state: saved, persist = () => true, clock = Date.now } = {}) {
   let state = clone(saved || { pending: [], recent: [], events: [] });
   state.schedule ??= emptySchedule();
+  state.display ??= { settings: deviceDisplaySettings({}), nextDue: null, previousDue: null, lastNoticeAt: null };
   let timeValid = false, clockOffset = 0;
   const now = () => clock() + clockOffset;
   const commit = next => {
@@ -134,16 +137,30 @@ export function createSimulator({ token = process.env.DEVICE_TOKEN || 'local-sim
     if (req.headers.authorization !== 'Bearer ' + token) return json(401, { error: 'Unauthorized' });
     if (req.method === 'GET' && req.url === '/api/health') return json(200, {
       name: 'Masa simulator', firmware: 'simulator', pending: state.pending.length, eventsPending: state.events.length,
-      ...(protocol === 4 ? { cron, autonomous: state.schedule.enabled, timeValid, ownerId: state.schedule.ownerId, revision: state.schedule.revision, scheduleMaxTimestamp: 4102444800000 } : {}) });
+      ...(protocol === 4 ? { cron, displaySettings, autonomous: state.schedule.enabled, timeValid, ownerId: state.schedule.ownerId, revision: state.schedule.revision, scheduleMaxTimestamp: 4102444800000 } : {}) });
+    if (protocol === 4 && displaySettings && req.method === 'GET' && req.url === '/api/display') return json(200, { settings: state.display.settings, nextDue: state.display.nextDue });
     if (protocol >= 3 && req.method === 'GET' && req.url === '/api/events') return json(200, { events: state.events });
     if (protocol === 4 && req.method === 'GET' && req.url === '/api/schedule') return json(200, responseSchedule());
+    const display = protocol === 4 && displaySettings && req.url === '/api/display';
     const ack = protocol >= 3 && req.url === '/api/events/ack';
     const schedule = protocol === 4 && req.url === '/api/schedule';
-    if (req.method !== 'POST' || (!ack && !schedule && req.url !== '/api/notify')) return json(404, { error: 'Not found' });
+    if (req.method !== 'POST' || (!ack && !schedule && !display && req.url !== '/api/notify')) return json(404, { error: 'Not found' });
     let body = '';
     try {
       for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > (schedule ? 32768 : ack ? 2048 : 1024)) return json(413, { error: 'Payload too large' }); }
       const input = JSON.parse(body);
+      if (display) {
+        validateDisplayReply({ protocol, settings: input?.settings, nextDue: input?.nextDue });
+        if (!validMillis(input.utcNow)) return json(400, { error: 'Invalid clock' });
+        const next = clone(state), previous = next.display.nextDue;
+        next.display.settings = deviceDisplaySettings(validateSettings({ displayAlwaysOn: input.settings.alwaysOn, displaySleepMinutes: input.settings.sleepMinutes,
+          displayWakeBeforeMinutes: input.settings.wakeBeforeMinutes, displayWakeAfterMinutes: input.settings.wakeAfterMinutes }));
+        if (previous !== null && previous !== input.nextDue && previous <= input.utcNow) next.display.previousDue = previous;
+        next.display.nextDue = input.nextDue;
+        if (stable(next) !== stable(state)) commit(next);
+        server.syncClock(input.utcNow);
+        return json(200, { accepted: true, settings: state.display.settings, nextDue: state.display.nextDue });
+      }
       if (schedule) { const result = applySchedule(input); return json(result.status, result.error ? { error: result.error } : { ...responseSchedule(), accepted: true }); }
       if (ack) {
         if (!Array.isArray(input.ids) || input.ids.length > 16 || input.ids.some(id => typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id))) return json(400, { error: 'Invalid acknowledgement' });
@@ -157,7 +174,7 @@ export function createSimulator({ token = process.env.DEVICE_TOKEN || 'local-sim
       const duplicate = known(state, notice.id);
       if (!duplicate) {
         if (state.pending.length >= 8) return json(429, { error: 'Queue full' });
-        const next = clone(state); next.pending.push(notice); commit(next); onNotice(notice);
+        const next = clone(state); next.pending.push(notice); next.display.lastNoticeAt = now(); commit(next); onNotice(notice);
       }
       json(200, { id: notice.id, accepted: true, duplicate });
     } catch (error) { json(error.message === 'Persistence failed' ? 507 : 400, { error: error.message }); }

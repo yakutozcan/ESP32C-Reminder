@@ -1,14 +1,15 @@
 import { DAY, validateReminder, nextAfter, latestDue, validateQuietHours, isQuietAt, deviceTimezone, normalizeDeviceReminder } from './schedule.js';
-import { validateDevice, validateDeviceJob, validateScheduleReply } from './device.js';
+import { validateDevice, validateDeviceJob, validateScheduleReply, validateDisplayReply } from './device.js';
 
 import { createBackup, parseBackup } from './backup.js';
+import { validateSettings, deviceDisplaySettings } from './settings.js';
 
 const defaultScheduler = () => ({ mode: 'desktop', desired: false, ownerId: '', revision: 0, syncedRevision: null });
 const clone = value => JSON.parse(JSON.stringify(value));
-export const newState = () => ({ version: 6, reminders: [], jobs: [], deviceEvents: [], settings: validateQuietHours(), scheduler: defaultScheduler(), device: { url: '', token: '' } });
+export const newState = () => ({ version: 7, reminders: [], jobs: [], deviceEvents: [], settings: validateSettings(), scheduler: defaultScheduler(), device: { url: '', token: '' } });
 
 export function migrateState(saved) {
-  if (![1, 2, 3, 4, 5, 6].includes(saved.version) || !Array.isArray(saved.reminders) || !Array.isArray(saved.jobs))
+  if (![1, 2, 3, 4, 5, 6, 7].includes(saved.version) || !Array.isArray(saved.reminders) || !Array.isArray(saved.jobs))
     throw new Error('Kayıt biçimi desteklenmiyor. Veriyi yedeklemeden sıfırlama.');
   const state = clone(saved);
   if (state.version >= 4 && (!Array.isArray(state.deviceEvents) || state.jobs.some(j =>
@@ -42,21 +43,21 @@ export function migrateState(saved) {
     }
     state.deviceEvents = [];
   }
-  if (state.version < 5) { state.settings = validateQuietHours(); state.scheduler = defaultScheduler(); }
+  if (state.version < 5) { state.settings = validateSettings(); state.scheduler = defaultScheduler(); }
   else {
-    state.settings = validateQuietHours(state.settings);
+    state.settings = validateSettings(state.settings);
     const owner = state.scheduler;
     if (!owner || !['desktop', 'device'].includes(owner.mode) || typeof owner.desired !== 'boolean' ||
         typeof owner.ownerId !== 'string' || !Number.isSafeInteger(owner.revision) || owner.revision < 0 ||
         (owner.mode === 'device' && !owner.ownerId) || (owner.mode === 'desktop' && owner.desired))
       throw new Error('Zamanlayıcı sahiplik kaydı geçerli değil. Veriyi yedeklemeden sıfırlama.');
   }
-  state.version = 6;
+  state.version = 7;
   return state;
 }
 
 export class ReminderEngine {
-  constructor({ state = newState(), persist, send, readEvents, ackEvents, readSchedule, writeSchedule, health, backup, notify = () => {}, clock = Date.now,
+  constructor({ state = newState(), persist, send, readEvents, ackEvents, readSchedule, writeSchedule, readDisplay, writeDisplay, health, backup, notify = () => {}, clock = Date.now,
     id = () => crypto.randomUUID() }) {
     this.state = migrateState(state);
     this.persist = persist;
@@ -64,6 +65,8 @@ export class ReminderEngine {
     this.readEvents = readEvents;
     this.ackEvents = ackEvents;
     this.notify = notify;
+    this.readDisplay = readDisplay; this.writeDisplay = writeDisplay;
+    this.displayReceipt = null; this.displayAttempt = null;
     this.readSchedule = readSchedule; this.writeSchedule = writeSchedule; this.health = health; this.backup = backup;
     this.clock = clock;
     this.id = id;
@@ -260,7 +263,8 @@ export class ReminderEngine {
       if (state.scheduler.mode === 'device') this.assertDeviceRange(state);
       if (JSON.stringify(state) === JSON.stringify(this.state)) return;
       if (state.scheduler.mode === 'device') await this.assertCronDevice(state);
-      this.bump(state);
+      if (JSON.stringify(state.reminders) !== JSON.stringify(this.state.reminders) ||
+          JSON.stringify(validateQuietHours(state.settings)) !== JSON.stringify(validateQuietHours(this.state.settings))) this.bump(state);
       if (!this.backup || await this.backup(this.snapshot()) === false)
         throw new Error('İçe aktarmadan önce mevcut verinin yedeği kaydedilemedi.');
       await this.commit(state);
@@ -268,8 +272,9 @@ export class ReminderEngine {
   }
   saveSettings(input) {
     return this.serial(async () => {
-      const state = this.snapshot(); state.settings = validateQuietHours(input);
-      this.bump(state); await this.commit(state);
+      const state = this.snapshot(); state.settings = validateSettings({ ...state.settings, ...input });
+      if (JSON.stringify(validateQuietHours(state.settings)) !== JSON.stringify(validateQuietHours(this.state.settings))) this.bump(state);
+      await this.commit(state);
     });
   }
   setAutonomous({ enabled, takeover = false }) {
@@ -383,7 +388,7 @@ export class ReminderEngine {
           await this.commit(state);
         }
         const payload = { ownerId: owner.ownerId, revision: owner.revision, enabled: owner.desired, takeover: owner.takeover === true,
-          timezone, utcNow: this.clock(), quietHours: state.settings,
+          timezone, utcNow: this.clock(), quietHours: validateQuietHours(state.settings),
           reminders: state.reminders.map(r => ({ ...normalizeDeviceReminder(r.deviceConsumed ? { ...r, enabled: true } : r), id: r.id, nextDue: r.nextDue })),
           deferred: deferred.map(j => ({ id: j.id, rootId: j.rootId, reminderId: j.reminderId, title: j.title, melody: j.melody,
             due: j.due, expiresAt: j.expiresAt, status: 'queued', outcome: 'pending' })),
@@ -411,6 +416,55 @@ export class ReminderEngine {
       const state = this.snapshot(); state.scheduler.error = error.message;
       await this.commit(state); throw error;
     }
+  }
+  displayTarget() {
+    const now = this.clock();
+    const due = [...this.state.reminders.filter(r => r.enabled).map(r => r.nextDue),
+      ...this.state.jobs.filter(j => j.status === 'queued' && j.outcome === 'pending' && j.expiresAt > now).map(j => j.due)]
+      .filter(value => Number.isSafeInteger(value) && value > now);
+    const settings = deviceDisplaySettings(this.state.settings);
+    const nextDue = due.length ? Math.min(...due) : null;
+    return { settings, nextDue };
+  }
+  displaySignature(target = this.displayTarget()) {
+    return JSON.stringify({ device: this.state.device, ...target });
+  }
+  displayStatus() {
+    if (!this.state.device.url) return { status: 'unconfigured' };
+    const signature = this.displaySignature();
+    if (this.displayReceipt?.signature === signature) return { status: 'synced' };
+    if (this.displayAttempt?.signature === signature) return { status: this.displayAttempt.status, error: this.displayAttempt.error };
+    return { status: 'pending' };
+  }
+  syncDisplay() {
+    return this.serial(async () => {
+      if (!this.state.device.url || !this.health || !this.readDisplay || !this.writeDisplay) return this.displayStatus();
+      const target = this.displayTarget(), signature = this.displaySignature(target);
+      try {
+        const health = await this.health(this.state.device);
+        if (health.protocol !== 4 || health.displaySettings !== true) {
+          this.displayReceipt = null;
+          this.displayAttempt = { signature, status: 'unsupported', error: 'Ekran ayarları için cihaz yazılımını 0.8.0 veya daha yeni bir sürüme güncelle.' };
+          return this.displayStatus();
+        }
+        // The clock range limits display hints as well as autonomous schedules.
+        // Always-on and idle settings still work for more distant desktop dates.
+        const nextDue = Number.isSafeInteger(health.scheduleMaxTimestamp) && target.nextDue > health.scheduleMaxTimestamp ? null : target.nextDue;
+        const payload = { settings: target.settings, nextDue, utcNow: this.clock() };
+        const remote = validateDisplayReply(await this.readDisplay(this.state.device));
+        const matches = value => JSON.stringify(value.settings) === JSON.stringify(target.settings) && value.nextDue === nextDue;
+        if (!matches(remote) || !health.timeValid || !this.displayReceipt || this.clock() - this.displayReceipt.clockAt >= 3600000) {
+          const reply = validateDisplayReply(await this.writeDisplay(this.state.device, payload));
+          if (reply.accepted !== true || !matches(reply)) throw new Error('Cihaz ekran ayarlarını onaylamadı.');
+          this.displayReceipt = { signature, clockAt: this.clock() };
+        } else this.displayReceipt = { signature, clockAt: this.displayReceipt.clockAt };
+        this.displayAttempt = null;
+      } catch (error) {
+        this.displayReceipt = null;
+        this.displayAttempt = { signature, status: 'offline', error: error.message };
+      }
+      return this.displayStatus();
+    });
   }
   testDevice() {
     return this.serial(async () => {

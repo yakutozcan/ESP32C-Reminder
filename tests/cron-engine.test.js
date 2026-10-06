@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ReminderEngine, newState, migrateState } from '../src/core/engine.js';
+import { validateSettings } from '../src/core/settings.js';
 import { createBackup, parseBackup } from '../src/core/backup.js';
 import { requestDevice, readDeviceEvents } from '../src/core/device.js';
 import { createSimulator } from '../tools/device-simulator.js';
@@ -74,9 +75,9 @@ test('v5 migration preserves ownership, cursors, quiet hours and credentials; un
     settings: { quietEnabled: true, quietStart: '22:00', quietEnd: '08:00' },
     scheduler: { mode: 'device', desired: true, ownerId: 'owner', revision: 3, syncedRevision: 3 },
     device: { url: 'http://device', token: 'saved-private-key' } };
-  assert.deepEqual(migrateState(old), { ...old, version: 6 });
+  assert.deepEqual(migrateState(old), { ...old, settings: validateSettings(old.settings), version: 7 });
   assert.equal(old.version, 5);
-  assert.throws(() => migrateState({ ...old, version: 7 }), /desteklenmiyor/);
+  assert.throws(() => migrateState({ ...old, version: 8 }), /desteklenmiyor/);
 });
 
 test('old firmware refuses cron handover, active edits and imports before changing local state', async t => {

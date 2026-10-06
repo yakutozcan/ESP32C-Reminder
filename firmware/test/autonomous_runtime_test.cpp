@@ -58,8 +58,9 @@ bool readMelody(JsonObject obj,bool& chime){String value=obj["melody"]|"";chime=
 bool saveQueue();
 #include "autonomous_state.h"
 #include "autonomous_runtime.h"
-bool saveQueue(){return persistenceOK;}
-void reset(){autonomous=AutonomousState{};queue.clear();recent.clear();events.clear();clockTrusted=false;active=false;persistenceOK=true;uptime+=1000;setenv("TZ","UTC0",1);tzset();}
+int persistenceCount=0;String storedDisplay;
+bool saveQueue(){++persistenceCount;if(!persistenceOK)return false;DynamicJsonDocument document(2048);displayStateJson(document.to<JsonObject>(),displayState,true);std::string value;serializeJson(document,value);storedDisplay=value;return true;}
+void reset(){displayState=masa::DisplayState{};persistenceCount=0;storedDisplay="";autonomous=AutonomousState{};queue.clear();recent.clear();events.clear();clockTrusted=false;active=false;persistenceOK=true;uptime+=1000;setenv("TZ","UTC0",1);tzset();}
 String payload(uint32_t revision=1,const String& owner="desk",bool enabled=true) {
   DynamicJsonDocument doc(8192);
   doc["ownerId"]=owner;doc["revision"]=revision;doc["enabled"]=enabled;doc["timezone"]="UTC0";doc["utcNow"]=fakeUtc;
@@ -122,5 +123,30 @@ int main(){
   post(cronPayload(3,"0 9 * * MON"));assert(server.status==400);assert(autonomous.revision==2); // Desktop must expand names.
   post(cronPayload(3,"*/0 * * * *"));assert(server.status==400);
   reset();post(edit(cronPayload(1,"0 9 * * *"),[](DynamicJsonDocument& d){d["reminders"][0].remove("time");}));assert(server.status==200); // Cron ignores the time placeholder.
+  auto displayPayload=[&](int64_t due=0){DynamicJsonDocument d(2048);JsonObject settings=d.createNestedObject("settings");settings["alwaysOn"]=false;settings["sleepMinutes"]=2;settings["wakeBeforeMinutes"]=10;settings["wakeAfterMinutes"]=10;if(due)d["nextDue"]=due;else d["nextDue"]=nullptr;d["utcNow"]=fakeUtc;std::string out;serializeJson(d,out);return String(out);};
+  auto postDisplay=[&](const String& value){server.request=value;putDisplay();};
+  reset();getDisplay();assert(server.status==200);assert(persistenceCount==0);assert(!clockTrusted);
+  postDisplay(displayPayload());assert(server.status==200);assert(clockTrusted);assert(persistenceCount==0); // Refresh time without writing identical defaults.
+  post(payload());const auto owner=autonomous.ownerId;const auto revision=autonomous.revision;const int displaySaveCount=persistenceCount;
+  postDisplay(displayPayload(fakeUtc+900000));assert(server.status==200);assert(displayState.nextDue==fakeUtc+900000);assert(persistenceCount==displaySaveCount+1);assert(autonomous.ownerId==owner&&autonomous.revision==revision&&autonomous.enabled);
+  postDisplay(displayPayload(fakeUtc+900000));assert(server.status==200);assert(persistenceCount==displaySaveCount+1);getDisplay();assert(persistenceCount==displaySaveCount+1);
+  persistenceOK=false;postDisplay(edit(displayPayload(fakeUtc+1800000),[](DynamicJsonDocument& d){d["settings"]["alwaysOn"]=true;}));assert(server.status==507);assert(!displayState.settings.alwaysOn);assert(displayState.nextDue==fakeUtc+900000);assert(autonomous.revision==revision);persistenceOK=true;
+  for(const char* key:{"sleepMinutes","wakeBeforeMinutes","wakeAfterMinutes"}) {postDisplay(edit(displayPayload(),[&](DynamicJsonDocument& d){d["settings"][key]=1441;}));assert(server.status==400);}
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d["settings"]["sleepMinutes"]=0;}));assert(server.status==400);
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d["settings"]["wakeBeforeMinutes"]=-1;}));assert(server.status==400);
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d["settings"]["alwaysOn"]="false";}));assert(server.status==400);
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d["settings"]["sleepMinutes"]=1.5;}));assert(server.status==400);
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d.remove("nextDue");}));assert(server.status==400);
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d["utcNow"]="invalid";}));assert(server.status==400);
+  postDisplay(String(2049,' '));assert(server.status==413);
+  postDisplay(edit(displayPayload(),[](DynamicJsonDocument& d){d["settings"]["sleepMinutes"]=1440;d["settings"]["wakeBeforeMinutes"]=0;d["settings"]["wakeAfterMinutes"]=0;d["settings"]["alwaysOn"]=true;}));assert(server.status==200);clockTrusted=false;assert(idleDisplayContrast(UINT32_MAX)==180);assert(autonomous.ownerId==owner&&autonomous.revision==revision);
+  DynamicJsonDocument displayStored(2048);assert(!deserializeJson(displayStored,storedDisplay));masa::DisplayState rebooted;assert(parseStoredDisplay(displayStored.as<JsonVariant>(),rebooted));assert(rebooted==displayState);
+  DynamicJsonDocument legacy(128);masa::DisplayState defaults;assert(parseStoredDisplay(legacy["display"],defaults));assert(defaults==masa::DisplayState{});
+  displayStored["settings"]["sleepMinutes"]=0;assert(!parseStoredDisplay(displayStored.as<JsonVariant>(),rebooted));
+  reset();autonomous.enabled=false;idleState.awakeSince=0;uptime=1000000;postDisplay(displayPayload(fakeUtc+600000));assert(idleDisplayContrast(uptime)==180);
+  fakeUtc+=600001;postDisplay(displayPayload(fakeUtc+86400000));assert(displayState.previousDue==fakeUtc-1);assert(idleDisplayContrast(uptime)==180);fakeUtc+=600000;assert(idleDisplayContrast(uptime)==0);
+  reset();autonomous.enabled=false;idleState.awakeSince=0;uptime=1000000;postDisplay(displayPayload(fakeUtc+600000));postDisplay(displayPayload());assert(!displayState.previousDue);assert(idleDisplayContrast(uptime)==0);
+  reset();post(payload());idleState.awakeSince=0;uptime=1000000;autonomous.reminders.front().nextDue=fakeUtc+600000;displayState.nextDue=fakeUtc+86400000;assert(idleDisplayContrast(uptime)==180);autonomous.reminders.front().enabled=false;assert(idleDisplayContrast(uptime)==0);autonomous.deferred.push_back(timer());autonomous.deferred.front().due=fakeUtc+600000;assert(idleDisplayContrast(uptime)==180);clockTrusted=false;assert(idleDisplayContrast(uptime)==0);
+  clockTrusted=true;autonomous.deferred.clear();markDisplayNotice();assert(idleDisplayContrast(uptime)==180);fakeUtc+=600000;assert(idleDisplayContrast(uptime)==0);
   std::cout<<"Actual firmware API, ownership, revisions, timer races, quiet melody and rollback tests passed\n";
 }

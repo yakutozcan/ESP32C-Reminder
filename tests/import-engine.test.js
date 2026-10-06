@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { validateSettings } from '../src/core/settings.js';
 import { ReminderEngine } from '../src/core/engine.js';
 
 const base = { title: 'Mola ver', frequency: 'daily', time: '09:00', melody: 'chime', enabled: true };
@@ -36,7 +37,7 @@ test('merge import is idempotent by reminder ID and restores quiet settings', as
   await engine.importBackup({ text: text([{ ...imported, title: 'Su iç, tekrar' }], settings), mode: 'merge' });
   assert.equal(engine.state.reminders.length, 2);
   assert.equal(engine.state.reminders.find(r => r.id === 'stable-id').title, 'Su iç, tekrar');
-  assert.deepEqual(engine.state.settings, settings);
+  assert.deepEqual(engine.state.settings, validateSettings(settings));
   assert.equal(backups.length, 2);
   const before = engine.snapshot(), saveCount = saves.length;
   await engine.importBackup({ text: text([{ ...imported, title: 'Su iç, tekrar' }], settings), mode: 'merge' });

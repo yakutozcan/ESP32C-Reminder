@@ -153,6 +153,7 @@ bool saveQueue() {
     if (event.deferred.length()) { DynamicJsonDocument snapshot(1536); deserializeJson(snapshot,event.deferred); obj["deferred"].set(snapshot); }
   }
   doc["format"] = 4;
+  displayStateJson(doc.createNestedObject("display"),displayState,true);
   stateJson(doc.createNestedObject("schedule"),autonomous,true);
   if (doc.overflowed()) return false;
   String data;
@@ -197,7 +198,7 @@ bool loadQueue() {
     }
   }
   if(migrated) {
-    if(doc["format"].as<int>()!=4 || !parseState(doc["schedule"],autonomous,true))return false;
+    if(doc["format"].as<int>()!=4 || !parseState(doc["schedule"],autonomous,true)||!parseStoredDisplay(doc["display"],displayState))return false;
     setenv("TZ",autonomous.timezone.c_str(),1);tzset();
   }
   return true;
@@ -219,9 +220,9 @@ void health() {
   if (!authorize()) return;
   if (!queueHealthy) { reply(503, "Persistent queue is corrupt; inspect serial monitor"); return; }
   DynamicJsonDocument doc(1024);
-  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.7.0";
+  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.8.0";
   doc["autonomous"]=autonomous.enabled;doc["timeValid"]=clockTrusted.load();doc["ownerId"]=autonomous.ownerId;doc["revision"]=autonomous.revision;
-  doc["cron"]=true;
+  doc["cron"]=true;doc["displaySettings"]=true;
   doc["scheduleMaxTimestamp"]=int64_t(sizeof(time_t)>=8?4102444800000LL:2145916800000LL);
   doc["eventsPending"] = events.size();
   doc["sound"] = soundCommands ? "passive-buzzer" : "unavailable";
@@ -251,8 +252,9 @@ void notify() {
   for (const auto& event : events) if (event.notificationId == id) duplicate = true;
   if (!duplicate) {
     if (queue.size() >= QUEUE_LIMIT) { reply(429, "Queue full"); return; }
-    queue.push_back({id, title, chime});
-    if (!saveQueue()) { queue.pop_back(); reply(507, "Queue could not be persisted"); return; }
+    const auto previousDisplay=displayState;
+    queue.push_back({id, title, chime});markDisplayNotice();
+    if (!saveQueue()) { queue.pop_back();displayState=previousDisplay; reply(507, "Queue could not be persisted"); return; }
   }
   DynamicJsonDocument ack(512);
   ack["protocol"] = 4; ack["id"] = id; ack["accepted"] = true; ack["duplicate"] = duplicate;
@@ -328,7 +330,7 @@ String randomKey() {
   return String(key);
 }
 void printStatus() {
-  Serial.println("Masa firmware 0.7.0 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
+  Serial.println("Masa firmware 0.8.0 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
   Serial.println("Pending button events: " + String(events.size()));
   Serial.println("Sound task: " + String(soundCommands ? "ready" : "unavailable"));
   Serial.println("OLED I2C: " + String(oledPresent ? "detected at 0x3C" : "not detected"));
@@ -532,6 +534,8 @@ void setup() {
   server.on("/api/events/ack", HTTP_POST, acknowledgeEvents);
   server.on("/api/schedule", HTTP_GET, getSchedule);
   server.on("/api/schedule", HTTP_POST, putSchedule);
+  server.on("/api/display", HTTP_GET, getDisplay);
+  server.on("/api/display", HTTP_POST, putDisplay);
   sntp_set_time_sync_notification_cb([](struct timeval*) {clockTrusted=true;});
   configTime(0,0,"pool.ntp.org","time.google.com");
   setenv("TZ",autonomous.timezone.c_str(),1);tzset();
@@ -578,6 +582,9 @@ void loop() {
   if (!feedback) actionFeedback = "";
   if (!active && !queue.empty() && !buttonGesture.busy() && !feedback) {
     active = true; activeSince = now; lastDraw = 0;idleState.wake(now);oled.setPowerSave(0);oled.setContrast(180);
+    // Also cover restored notices and USB tests that were queued before clock sync.
+    const auto previousDisplay=displayState;markDisplayNotice();
+    if(!(displayState==previousDisplay)&&!saveQueue())displayState=previousDisplay;
     setSound(queue.front().chime && noticeSoundAllowed());
   }
   if (feedback) {

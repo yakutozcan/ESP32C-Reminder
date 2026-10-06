@@ -168,3 +168,26 @@ ve yazılan verinin hash kontrolü geçti. Bu alternatif, aynı derlemenin
 `firmware.bin` dosyasını `0x10000` adresine yazar; dosya sistemi, NVS,
 bootloader ve bölüm tablosu korunur. Bölüm düzeni farklı bir projede adresi
 ayrıca doğrula.
+
+### Ayarlanabilir ekran — firmware 0.8.0
+
+6 Ekim 2026'da aynı kart 0.7.0 → 0.8.0 güncellendi. Önce 4 MB flash
+yedeği `~/Library/Application Support/Masa/device-backups/20261006-152524-before-0.8.0/`
+altına alındı ve SHA-256 bütünlüğü doğrulandı. `--no-stub` ile yalnızca
+`0x10000` uygulama alanına yazıldı; yükleme hash kontrolü geçti.
+
+Gerçek kartta protokol 4, `cron:true`, `displaySettings:true` ve NTP ile
+güvenilir saat doğrulandı. Yeni ekran API'si varsayılan olarak sürekli açık
+kapalı, boşta kapanma 2 dakika, hatırlatmadan önce/sonra 10/10 dakika döndürdü.
+Sürekli açık ve 3/20/5 dakikalık geçici ayarlar yazıldı, tekrar okundu ve
+aynı ayarların tekrarlanan aktarımı kabul edildi. Geçersiz 0 dakika boşta
+kapanma isteği HTTP 400 ile reddedildi ve önceki ayarlar korundu.
+
+USB üzerinden yazılım yeniden başlatması sonrasında ayarlar aynen korundu.
+Test bitince ilk ekran ayarları geri yüklendi. Takvim sahibi, sürümü,
+etkinliği, zaman imleci, iki geçmiş kaydı ve erteleme listesi güncelleme ve
+ekran ayarı testi boyunca birebir korundu; mevcut hatırlatıcılar değiştirilmedi.
+
+Bu kontrol API ve depolama davranışını doğrular. OLED'in gerçek 10 dakika
+öncesi/sonrası aralığında görünür olması ayrıca fiziksel gözlem gerektirir;
+zaman sınırları, sıfır aralık, çakışma ve bildirim önceliği C++ testlerinde doğrulandı.

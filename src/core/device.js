@@ -1,3 +1,4 @@
+import { validateSettings, deviceDisplaySettings } from './settings.js';
 export function validateDevice(input) {
   const raw = String(input.url ?? '').trim();
   if (!raw) return { url: '', token: '' };
@@ -41,6 +42,11 @@ export async function requestDevice(device, path, body, fetcher = fetch, timeout
     if (path === '/api/events/ack' && (![3, 4].includes(data.protocol) || !Array.isArray(data.acknowledged) ||
         JSON.stringify([...data.acknowledged].sort()) !== JSON.stringify([...body.ids].sort())))
       throw new Error('Cihaz düğme işlemlerini onaylamadı.');
+    if (path === '/api/display') {
+      validateDisplayReply(data);
+      if (body && (data.accepted !== true || JSON.stringify(data.settings) !== JSON.stringify(body.settings) || data.nextDue !== body.nextDue))
+        throw new Error('Cihaz ekran ayarlarını onaylamadı.');
+    }
     if (path === '/api/schedule') {
       validateScheduleReply(data);
       if (body && (data.accepted !== true || data.ownerId !== body.ownerId || data.revision !== body.revision || data.enabled !== body.enabled))
@@ -96,5 +102,19 @@ export function validateScheduleReply(data) {
   for (const job of [...data.history, ...data.deferred]) validateDeviceJob(job);
   if (new Set([...data.history, ...data.deferred].map(j => j.id)).size !== data.history.length + data.deferred.length)
     throw new Error('Cihaz takviminde tekrar eden kayıt var.');
+  return data;
+}
+
+
+export function validateDisplayReply(data) {
+  const value = data?.settings;
+  if (!data || data.protocol !== 4 || !value || typeof value.alwaysOn !== 'boolean' ||
+      !Number.isInteger(value.sleepMinutes) || !Number.isInteger(value.wakeBeforeMinutes) || !Number.isInteger(value.wakeAfterMinutes) ||
+      (data.nextDue !== null && (!Number.isSafeInteger(data.nextDue) || data.nextDue < 946684800000 || data.nextDue > 4102444800000)))
+    throw new Error('Cihaz ekran ayarları geçerli değil.');
+  try {
+    data.settings = deviceDisplaySettings(validateSettings({ displayAlwaysOn: value.alwaysOn, displaySleepMinutes: value.sleepMinutes,
+      displayWakeBeforeMinutes: value.wakeBeforeMinutes, displayWakeAfterMinutes: value.wakeAfterMinutes }));
+  } catch { throw new Error('Cihaz ekran ayarları geçerli değil.'); }
   return data;
 }

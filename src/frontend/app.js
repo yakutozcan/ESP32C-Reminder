@@ -55,9 +55,25 @@ function renderScheduleStatus() {
   $('#takeover-note').hidden = $('#takeover-schedule').hidden;
   $('#schedule-result').textContent = scheduler.error || (desired && scheduler.timeValid === false ? 'Cihazın saati hazır değil. Hatırlatmalar saat eşitlenene kadar bekler; bağlantıyı ve cihazın gücünü kontrol et.' : !supported ? 'Bağımsız çalışma için cihazı bağla ve cihaz yazılımını 0.6.0 veya daha yeni sürüme güncelle.' : pending ? 'Takvim değişiklikleri aktarılmayı bekliyor. Son aktarılan takvim cihazda çalışmaya devam eder.' : scheduler.mode === 'device' ? 'Takvim cihaza aktarıldı. Bilgisayar kapalıyken de hatırlatır.' : 'Hatırlatmaları şu anda bilgisayar başlatıyor.');
 }
+function renderDisplayStatus() {
+  const status = state.displayStatus || { status: 'unconfigured' };
+  const messages = {
+    synced: 'Kaydedilen ekran ayarları cihaza aktarıldı.',
+    pending: 'Ayarlar kaydedildi; cihaza aktarım bekliyor.',
+    unsupported: 'Ekran ayarları bilgisayarda kayıtlı. Cihaz yazılımını 0.8.0 veya daha yeni sürüme güncelle.',
+    offline: 'Ayarlar bilgisayarda kayıtlı. Cihaz çevrimdışı; bağlantı gelince aktarılacak.',
+    unconfigured: 'Ayarlar bilgisayarda saklanır. Cihaz bağlantısını ayarladığında aktarılır.'
+  };
+  $('#display-result').textContent = (messages[status.status] || messages.pending) + (status.error && status.status !== 'unsupported' ? ' ' + status.error : '');
+}
+function updateDisplayFields() {
+  const disabled = preferencesForm.elements.displayAlwaysOn.checked;
+  for (const field of ['displaySleepMinutes', 'displayWakeBeforeMinutes', 'displayWakeAfterMinutes']) preferencesForm.elements[field].disabled = disabled;
+}
+preferencesForm.elements.displayAlwaysOn.onchange = updateDisplayFields;
 function render() {
   if (!state) return;
-  const key = JSON.stringify([view, filter, state.reminders, state.jobs, state.connection, state.scheduler, state.settings, state.lastError, Math.floor(state.now / 60000), new Date().toDateString()]);
+  const key = JSON.stringify([view, filter, state.reminders, state.jobs, state.connection, state.scheduler, state.settings, state.displayStatus, state.lastError, Math.floor(state.now / 60000), new Date().toDateString()]);
   if (key === renderedState) return;
   renderedState = key;
   $('#today-label').textContent = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -68,6 +84,7 @@ function render() {
   $('#sidebar-status').textContent = !state.device.url ? 'Bağlantı ayarlanmadı' : online ? 'Bağlı · Wi-Fi' : state.connection.status === 'offline' ? 'Cihaza ulaşılamıyor' : 'Kontrol bekleniyor';
   $('#device-result').textContent = state.connection.error || (online ? 'Bağlantı hazır. Cihaz bildirim alabilir.' + (state.connection.protocol === 2 ? ' Düğme işlemleri için cihaz yazılımını 0.3.0 sürümüne güncelle.' : '') : 'Bağlantı henüz kontrol edilmedi.');
   renderScheduleStatus();
+  renderDisplayStatus();
   const queued = state.jobs.filter(j => j.status === 'queued');
   const waiting = queued.filter(j => j.due <= state.now).length;
   const snoozed = queued.length - waiting;
@@ -330,6 +347,11 @@ $('#open-preferences').onclick = () => {
   preferencesForm.elements.quietEnabled.checked = settings.quietEnabled === true;
   preferencesForm.elements.quietStart.value = settings.quietStart || '22:00';
   preferencesForm.elements.quietEnd.value = settings.quietEnd || '08:00';
+  preferencesForm.elements.displayAlwaysOn.checked = settings.displayAlwaysOn === true;
+  preferencesForm.elements.displaySleepMinutes.value = settings.displaySleepMinutes ?? 2;
+  preferencesForm.elements.displayWakeBeforeMinutes.value = settings.displayWakeBeforeMinutes ?? 10;
+  preferencesForm.elements.displayWakeAfterMinutes.value = settings.displayWakeAfterMinutes ?? 10;
+  updateDisplayFields(); renderDisplayStatus();
   $('#preferences-error').textContent = ''; $('#backup-error').textContent = ''; $('#backup-file').value = '';
   $('#preferences-dialog').showModal();
 };
@@ -337,8 +359,12 @@ preferencesForm.onsubmit = e => {
   e.preventDefault(); $('#preferences-error').textContent = '';
   withBusy(preferencesForm.querySelector('[type="submit"]'), async () => {
     state = await api('saveSettings', { quietEnabled: preferencesForm.elements.quietEnabled.checked,
-      quietStart: preferencesForm.elements.quietStart.value, quietEnd: preferencesForm.elements.quietEnd.value });
-    render(); toast('Sessiz saatler kaydedildi.');
+      quietStart: preferencesForm.elements.quietStart.value, quietEnd: preferencesForm.elements.quietEnd.value,
+      displayAlwaysOn: preferencesForm.elements.displayAlwaysOn.checked,
+      displaySleepMinutes: Number(preferencesForm.elements.displaySleepMinutes.value),
+      displayWakeBeforeMinutes: Number(preferencesForm.elements.displayWakeBeforeMinutes.value),
+      displayWakeAfterMinutes: Number(preferencesForm.elements.displayWakeAfterMinutes.value) });
+    render(); toast(state.displayStatus?.status === 'synced' ? 'Ayarlar kaydedildi ve cihaza aktarıldı.' : 'Ayarlar kaydedildi. Cihaz aktarımını Ekran bölümünden takip edebilirsin.');
   }, $('#preferences-error'));
 };
 $('#export-backup').onclick = () => withBusy($('#export-backup'), async () => {
@@ -355,7 +381,7 @@ $('#backup-file').onchange = async e => {
   try {
     const text = await file.text();
     const preview = await api('previewImport', { text }); importText = text;
-    $('#import-summary').textContent = preview.count + ' hatırlatıcı ve sessiz saat ayarları geri yüklenecek.';
+    $('#import-summary').textContent = preview.count + ' hatırlatıcı, sessiz saatler ve ekran ayarları geri yüklenecek.';
     $('#import-titles').innerHTML = preview.reminders.map(r => '<li>' + escapeHTML(typeof r === 'string' ? r : r.title) + '</li>').join('');
     importForm.reset(); $('#import-error').textContent = ''; updateImportNote();
     $('#import-dialog').showModal();
@@ -363,7 +389,7 @@ $('#backup-file').onchange = async e => {
   finally { e.target.value = ''; }
 };
 function updateImportNote() {
-  $('#import-note').textContent = importForm.elements.mode.value === 'replace' ? 'Mevcut hatırlatıcılar ve bekleyen bildirimler kaldırılır. İşlemden önce otomatik geri dönüş yedeği saklanır. Sessiz saatler yedekten alınır.' : 'Mevcut notlar korunur; aynı kimlikteki notlar güncellenir. Sessiz saatler yedekten alınır.';
+  $('#import-note').textContent = importForm.elements.mode.value === 'replace' ? 'Mevcut hatırlatıcılar ve bekleyen bildirimler kaldırılır. İşlemden önce otomatik geri dönüş yedeği saklanır. Sessiz saatler ve ekran ayarları yedekten alınır.' : 'Mevcut notlar korunur; aynı kimlikteki notlar güncellenir. Sessiz saatler ve ekran ayarları yedekten alınır.';
 }
 for (const radio of importForm.querySelectorAll('[name="mode"]')) radio.onchange = updateImportNote;
 importForm.onsubmit = e => {

@@ -16,7 +16,7 @@ async function getEngine() {
 }
 async function snapshot() {
   const state = (await getEngine()).snapshot();
-  return { ...state, connection, lastError, now: Date.now(), localOffset: new Date().getTimezoneOffset() };
+  return { ...state, displayStatus: (await getEngine()).displayStatus(), connection, lastError, now: Date.now(), localOffset: new Date().getTimezoneOffset() };
 }
 export const api = {
   snapshot,
@@ -24,7 +24,7 @@ export const api = {
   async previewSchedule(input) { return (await getEngine()).previewSchedule(input); },
   async previewImport(input) { return (await getEngine()).previewImport(input); },
   async importBackup(input) { await (await getEngine()).importBackup(input); return snapshot(); },
-  async saveSettings(input) { await (await getEngine()).saveSettings(input); return snapshot(); },
+  async saveSettings(input) { const e = await getEngine(); await e.saveSettings(input); await e.syncDisplay(); return snapshot(); },
   async setAutonomous(input) { await (await getEngine()).setAutonomous(input); return snapshot(); },
   async syncSchedule() { await (await getEngine()).syncSchedule(); return snapshot(); },
   async saveReminder(input) { await (await getEngine()).saveReminder(input); return snapshot(); },
@@ -62,6 +62,7 @@ async function cycle() {
       lastEventSync = Date.now();
       try { await (await getEngine()).syncDevice(); actionError = ''; }
       catch (error) { actionError = 'Cihaz eşitlemesi: ' + error.message; }
+      await (await getEngine()).syncDisplay();
     }
     await (await getEngine()).tick();
     lastError = actionError;
@@ -81,6 +82,8 @@ export function init(app) {
       send: (device, job) => requestDevice(device, '/api/notify', job),
       readEvents: readDeviceEvents,
       health: device => requestDevice(device, '/api/health'),
+      readDisplay: device => requestDevice(device, '/api/display'),
+      writeDisplay: (device, payload) => requestDevice(device, '/api/display', payload),
       readSchedule: device => requestDevice(device, '/api/schedule'),
       writeSchedule: (device, payload) => requestDevice(device, '/api/schedule', payload),
       backup: state => app.store.set('reminder-import-backup', { createdAt: Date.now(), state }),

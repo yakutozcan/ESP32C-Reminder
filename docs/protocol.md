@@ -1,6 +1,6 @@
 # Local reminder protocol · version 4
 
-Masa 0.7.0 and firmware 0.7.0 communicate on the same LAN, on TCP port 80.
+Masa 0.8.0 and firmware 0.8.0 communicate on the same LAN, on TCP port 80.
 All `/api/` endpoints require `Authorization: Bearer <DEVICE_TOKEN>`.
 The passwordless captive portal is available only in setup mode, where Ayres
 owns port 80 and the reminder endpoints are unavailable. No cloud or incoming
@@ -16,7 +16,7 @@ Protocol 1 produces an explicit upgrade message.
 `GET /api/health`
 
 ```json
-{"protocol":4,"name":"Masa ESP32-C3","firmware":"0.7.0","cron":true,"pending":0,"eventsPending":0,"autonomous":true,"timeValid":true,"ownerId":"desktop-uuid","revision":7,"scheduleMaxTimestamp":2145916800000,"ip":"192.168.1.50","rssi":-50}
+{"protocol":4,"name":"Masa ESP32-C3","firmware":"0.8.0","cron":true,"displaySettings":true,"pending":0,"eventsPending":0,"autonomous":true,"timeValid":true,"ownerId":"desktop-uuid","revision":7,"scheduleMaxTimestamp":2145916800000,"ip":"192.168.1.50","rssi":-50}
 ```
 
 `pending` includes the displayed notice (maximum 8). `eventsPending` counts
@@ -205,7 +205,7 @@ behaviors have host tests; physical board verification remains pending.
 
 ## Storage, migration and rollback
 
-Firmware 0.7.0 atomically renames `/masa-state.tmp` to `/masa-state.json` in
+Firmware 0.8.0 atomically renames `/masa-state.tmp` to `/masa-state.json` in
 LittleFS, storing pending/recent/events/schedule together before acknowledging
 a mutation. An interrupted or failed write preserves the previous snapshot.
 `/wifi.json` and the original NVS queue/key remain separate and intact. First
@@ -219,28 +219,68 @@ Before downgrade: disable autonomous scheduling, synchronize/drain actions,
 retain backups, and account for stale NVS notices replaying. An old firmware
 cannot consume the new LittleFS schedule; rollback is not seamless.
 
-Desktop state version 6 adds cron definitions; version 5 added quiet preferences
+Desktop state version 7 adds screen preferences; version 6 added cron
+definitions; version 5 added quiet preferences
 and persisted scheduler ownership. Migration preserves schedules, IDs, snooze
-families, receipts, device credentials and active ownership. Original v1–5 states are backed up under `reminder-state-v<version>-backup` before startup
+families, receipts, device credentials and active ownership. Original v1–6 states are backed up under `reminder-state-v<version>-backup` before startup
 migration. v1 vibration settings become chime/silence; v3's legacy snoozed status
 becomes an outcome separate from delivery status. Returning to an older desktop
 requires confirmed device handback, quitting the app and restoring the matching
-state backup. Version 6 prevents an old desktop from interpreting cron as a
+state backup. Versions 6 and 7 prevent an old desktop from interpreting cron as a
 daily reminder. Later changes do not appear in that backup.
 
 Portable `masa-reminders` JSON version 1 exports definitions/preferences only,
-excluding keys, Wi-Fi, runtime jobs and ownership. Import validates the full
+including quiet and screen preferences, excluding keys, Wi-Fi, runtime jobs and ownership. Import validates the full
 file and combined capacity before writing. Existing data is saved under
 `reminder-import-backup` as `{createdAt,state}` before a changed import; failures
 preserve current state. Merge replaces matching IDs without duplicates and keeps
 other definitions; replace removes other definitions. An identical import is
-read-only. Historical raw desktop state v1–6 can be imported as definitions.
+read-only. Historical raw desktop state v1–7 can be imported as definitions.
+
+## Display settings · firmware 0.8.0+
+
+`GET /api/health` advertises `displaySettings: true`. Missing capability leaves
+screen preferences saved locally with an explicit upgrade/pending status.
+
+Authenticated `GET /api/display` returns current `{protocol:4, settings,
+nextDue}`. Authenticated `POST /api/display` accepts:
+
+```json
+{
+  "settings":{"alwaysOn":false,"sleepMinutes":2,"wakeBeforeMinutes":10,"wakeAfterMinutes":10},
+  "nextDue":1791288000000,
+  "utcNow":1791287100000
+}
+```
+
+POST replies with the same settings/hint plus `accepted:true`. This endpoint
+works independently of schedule ownership and does not change its owner,
+revision, enabled state, cursors or delivery records. `nextDue` is a UTC
+millisecond timestamp or null; desktop sends its nearest active occurrence or
+snooze. Autonomous mode uses actual device cursors/deferred jobs instead.
+UTC synchronization does not reset the manual idle timer.
+
+`alwaysOn` must be boolean; integer `sleepMinutes` is 1–1440 and both wake
+windows are 0–1440. Missing legacy display state defaults to false/2/10/10.
+Preferences and hints are stored atomically with the device journal; identical
+updates only refresh the clock without writing flash. HTTP 507 preserves the
+previous state and does not claim acceptance.
+
+The before window is `[due-before,due)`, the after window is `[due,due+after)`;
+zero disables that side. A passed hint retains the after window when its cursor
+advances. A future removed/paused hint stops pre-waking. Actual notice receipt
+and display start preserve a post-window for delayed/restored notices. Closely
+spaced reminder windows overlap. Epoch windows require a trusted clock;
+always-on, active notices and BOOT wake remain effective without it. Outside
+windows idle contrast dims halfway through the configured sleep interval and
+then powers down. Window rendering does not extend the idle timer.
 
 ## OLED, simulator and provisioning
 
 Active notices take priority over idle clock/date, next title, countdown and
-connection/clock state, rotating every five seconds. Idle contrast dims at
-60 seconds and turns off at 120 seconds; BOOT or a new notice wakes it. The
+connection/clock state, rotating every five seconds. Default idle contrast dims
+at 60 seconds and turns off at 120 seconds; configured display settings and
+reminder windows override these defaults. BOOT or a new notice wakes it. The
 72×40 OLED displays 12 characters × 3 rows in a Latin Extended 6×12 font with
 Turkish glyphs. Paging uses code points; original UTF-8 titles stay in storage.
 

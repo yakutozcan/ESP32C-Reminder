@@ -10,8 +10,9 @@ Keep the desktop app local, avoid external services, and preserve the shared not
 3. Exercise the changed flow in `tinyjs dev` with the device simulator or hardware.
 4. Describe observable before/after behavior and your verification in the pull request.
 
-Masa 0.7.0 uses local state version 6; firmware 0.7.0 uses protocol 4 with the
-`cron: true` health capability. Cron must be rejected before device-owned edits
+Masa 0.8.0 uses local state version 7; firmware 0.8.0 uses protocol 4 with the
+`cron: true` and `displaySettings: true` health capabilities. Screen settings
+use the standalone /api/display endpoint in both desktop and device modes. Cron must be rejected before device-owned edits
 or handover if that capability is missing. Preserve
 protocol 2/3 desktop delivery and existing migration backups. Autonomous changes
 must cover ownership transfer, lost replies, restart, device cursor progress,

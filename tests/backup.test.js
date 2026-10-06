@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBackup, parseBackup } from '../src/core/backup.js';
+import { validateSettings } from '../src/core/settings.js';
 
 const reminder = { id: 'portable-1', title: 'Mola ver', frequency: 'daily', time: '09:00', melody: 'chime', enabled: true };
 const portable = reminders => ({ format: 'masa-reminders', version: 1, reminders });
@@ -17,11 +18,11 @@ test('portable export preserves definitions and quiet preferences without creden
   assert.equal('nextDue' in backup.reminders[0], false);
   const parsed = parseBackup(JSON.stringify(backup));
   assert.deepEqual(parsed.reminders, backup.reminders);
-  assert.deepEqual(parsed.settings, state.settings && { quietEnabled: true, quietStart: '22:00', quietEnd: '08:00' });
+  assert.deepEqual(parsed.settings, validateSettings(state.settings));
 });
 
 test('current and legacy state exports import definitions only without mutating source', () => {
-  for (const version of [1, 2, 3, 4, 5, 6]) {
+  for (const version of [1, 2, 3, 4, 5, 6, 7]) {
     const entry = version === 1 ? { ...reminder, melody: undefined, vibrationMs: 0 } : reminder;
     const data = { version, reminders: [entry], jobs: [{ arbitrary: true }], device: { token: 'secret' } };
     const before = JSON.stringify(data);
@@ -55,4 +56,40 @@ test('portable backup retains two-week and interval schedules as stable definiti
   assert.equal(data.reminders[0].weekInterval, 2);
   assert.equal(data.reminders[1].anchorAt, reminders[1].anchorAt);
   assert.equal(data.reminders[1].workEnd, '18:00');
+});
+
+
+test('portable version one round-trips display preferences while omitting secrets and runtime state', () => {
+  const settings = { quietEnabled: true, quietStart: '21:00', quietEnd: '07:00', displayAlwaysOn: true,
+    displaySleepMinutes: 1440, displayWakeBeforeMinutes: 0, displayWakeAfterMinutes: 30,
+    token: 'private-device-token', displayAwakeSince: 123, device: { address: 'private-device' } };
+  const state = { version: 7, reminders: [reminder], jobs: [], settings };
+  const original = JSON.stringify(state);
+  const backup = createBackup(state, 0);
+  assert.equal(backup.version, 1);
+  assert.deepEqual(parseBackup(JSON.stringify(backup)).settings, validateSettings(settings));
+  assert.equal(JSON.stringify(backup).includes('private-device'), false);
+  assert.equal('displayAwakeSince' in backup.settings, false);
+  assert.equal(JSON.stringify(state), original);
+  assert.deepEqual(parseBackup(state).settings, validateSettings(settings));
+});
+
+test('old portable and historic backups restore the display defaults without replacing quiet preferences', () => {
+  const quiet = { quietEnabled: true, quietStart: '23:00', quietEnd: '06:00' };
+  assert.deepEqual(parseBackup({ ...portable([]), settings: quiet }).settings, validateSettings(quiet));
+  assert.deepEqual(parseBackup(portable([])).settings, validateSettings());
+  for (const version of [1, 2, 3, 4, 5, 6, 7]) {
+    assert.deepEqual(parseBackup({ version, reminders: [], jobs: [], settings: quiet }).settings, validateSettings(quiet));
+  }
+});
+
+test('invalid display preferences fail before portable or historic import and before export', () => {
+  for (const settings of [{ displayAlwaysOn: 'yes' }, { displayAlwaysOn: null }, { displaySleepMinutes: 0 },
+    { displaySleepMinutes: '2' }, { displaySleepMinutes: 1441 }, { displaySleepMinutes: 2.5 },
+    { displayWakeBeforeMinutes: -1 }, { displayWakeBeforeMinutes: false }, { displayWakeAfterMinutes: null },
+    { displayWakeAfterMinutes: 1441 }, { displayWakeAfterMinutes: NaN }, []]) {
+    assert.throws(() => parseBackup({ ...portable([reminder]), settings }));
+    assert.throws(() => parseBackup({ version: 7, reminders: [reminder], jobs: [], settings }));
+    assert.throws(() => createBackup({ reminders: [reminder], settings }));
+  }
 });

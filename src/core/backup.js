@@ -1,15 +1,8 @@
-import { validateReminder, validateQuietHours } from './schedule.js';
+import { validateReminder } from './schedule.js';
+import { validateSettings } from './settings.js';
 
 export const BACKUP_FORMAT = 'masa-reminders';
 export const MAX_BACKUP_BYTES = 1024 * 1024;
-
-function preferences(settings = {}) {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings) ||
-      (settings.quietEnabled !== undefined && typeof settings.quietEnabled !== 'boolean') ||
-      ['quietStart', 'quietEnd'].some(key => settings[key] !== undefined && typeof settings[key] !== 'string'))
-    throw new Error('Yedekteki sessiz saat ayarları geçersiz.');
-  return validateQuietHours(settings);
-}
 
 function definitions(reminders, legacy = false) {
   if (!Array.isArray(reminders) || reminders.length > 100)
@@ -34,7 +27,7 @@ function definitions(reminders, legacy = false) {
 // Only portable definitions and user preferences cross the export boundary.
 export function createBackup(state, now = Date.now()) {
   return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date(now).toISOString(),
-    reminders: definitions(state.reminders), settings: preferences(state.settings) };
+    reminders: definitions(state.reminders), settings: validateSettings(state.settings) };
 }
 
 export function parseBackup(input) {
@@ -45,8 +38,8 @@ export function parseBackup(input) {
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Yedek biçimi desteklenmiyor.');
   const portable = data.format === BACKUP_FORMAT;
-  const historic = data.format === undefined && [1, 2, 3, 4, 5, 6].includes(data.version) && Array.isArray(data.jobs);
+  const historic = data.format === undefined && [1, 2, 3, 4, 5, 6, 7].includes(data.version) && Array.isArray(data.jobs);
   if (portable ? data.version !== 1 : !historic) throw new Error('Yedek biçimi veya sürümü desteklenmiyor.');
   return { reminders: definitions(data.reminders, historic && data.version === 1),
-    settings: preferences(data.settings) };
+    settings: validateSettings(data.settings) };
 }
