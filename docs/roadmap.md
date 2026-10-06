@@ -3,9 +3,9 @@
 Başlangıç: 5 Ekim 2026. Özellikler mevcut yerel çalışma modelini koruyarak,
 her aşamada kullanılabilir ve doğrulanmış bir sürüm oluşturacak şekilde eklenir.
 
-**Güncel durum: 6 Ekim 2026, Masa 0.8.0 / firmware 0.8.0.** İlk altı aşamanın
+**Güncel durum: 6 Ekim 2026, Masa 0.8.1 / firmware 0.8.0.** İlk altı aşamanın
 yazılımı tamamlandı; kolay tekrarlar ve cron 7. aşamada eklendi. 138 uygulama
-testi, firmware testleri ve 0.8.0 macOS paketinin sürüm/imza kontrolü geçti.
+testi, firmware testleri ve 0.8.1 macOS paketinin sürüm/imza kontrolü geçti.
 Kartın tam yedeği alındı; firmware 0.8.0 yüklendi. Ekran ayarlarının yeniden
 başlatma sonrası kalıcılığı ve mevcut takvim/bağlantı/geçmişin korunması doğrulandı.
 İlk iki aşama kendi tarihsel sürümlerini kaydeder; donanım doğrulaması ve kalan
@@ -193,8 +193,9 @@ aralıkları ve boşta kapanmayı geçersiz kılar. BOOT ve aktif bildirimler ö
 - [x] Gerçek motor ve HTTP simülatörüyle dar/geniş tarayıcı akışları; kaybolan
       kapatma yanıtı sonrası güvenli yeniden eşitleme.
 - [x] tinyjs'in native çekirdeğinde cron/takvim, sessiz saatler, yedekleme ve sahiplik.
-- [x] Masa 0.8.0 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
+- [x] Masa 0.8.1 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
       paket sürümü ve imzasının doğrulanması.
+- [x] Masa'ya özel krem/yeşil masa saati ikonu; şeffaf PNG kaynak ve macOS ICNS paketi.
 - [x] Gerçek USB kartta yükleme, NTP, bağımsız takvim, yeniden başlatma ve
       uygulamayla devir/eşitleme. Ayrıntılar [donanım kaydında](hardware.md#usb-kart-doğrulaması--6-ekim-2026).
 

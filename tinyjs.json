@@ -3,7 +3,8 @@
   "title": "Masa — Hatırlatıcı",
   "size": "1180x820",
   "id": "io.github.esp32c-reminder",
-  "version": "0.8.0",
+  "version": "0.8.1",
+  "icon": "icon.png",
   "minTinyjsVersion": "0.47.1",
   "contextMenu": false
 }

@@ -15,7 +15,7 @@ ile kısa bir melodi çalar. Her hatırlatıcı için sessiz bildirim de seçile
 Masaüstü uygulaması [tinyjsapp](https://github.com/tarwin/tinyjsapp), cihazın Wi-Fi
 kurulumu [AyresWiFiManager](https://registry.platformio.org/libraries/ayresnet/AyresWiFiManager)
 kullanır. Takvim ve veriler bilgisayarında saklanır; ayrı bir sunucu veya bulut
-hesabı gerekmez. **Masa 0.8.0 / firmware 0.8.0** ile takvimi cihaza aktarıp
+hesabı gerekmez. **Masa 0.8.1 / firmware 0.8.0** ile takvimi cihaza aktarıp
 bilgisayar kapalıyken de hatırlatmasını sağlayabilirsin.
 
 ![Masa ajandası: günlük, haftalık ve aylık örnek hatırlatıcılar](docs/images/masa-agenda.jpg)
