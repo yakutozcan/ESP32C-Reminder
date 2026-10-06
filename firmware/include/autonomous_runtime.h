@@ -147,13 +147,23 @@ void drawIdle(uint32_t now) {
   if(!queueHealthy){oled.setPowerSave(0);drawLines("Depo hatası Seri monitör kontrol et",0);return;}
   const unsigned contrast=idleDisplayContrast(now);oled.setPowerSave(contrast==0);if(!contrast)return;oled.setContrast(contrast);
   if(!clockTrusted){drawLines("Saat eşitle Bekleniyor  Masa'yı aç",0);return;}
-  const int64_t utc=utcMillis();const tm local=masa::local(utc);const unsigned page=idleState.page(now);
+  const int64_t utc=utcMillis();const tm local=masa::local(utc);
+  if(!idleState.showDetails(now)) {
+    char time[6],date[16];
+    snprintf(time,sizeof(time),"%02d:%02d",local.tm_hour,local.tm_min);
+    snprintf(date,sizeof(date),"%02d.%02d.%04d",local.tm_mday,local.tm_mon+1,local.tm_year+1900);
+    drawIdleClock(time,date);return;
+  }
   int64_t next=0;String title;
   if(autonomous.enabled){for(const auto& r:autonomous.reminders)if(r.enabled&&r.nextDue&&(next==0||r.nextDue<next)){next=r.nextDue;title=r.title;}for(const auto& job:autonomous.deferred)if(next==0||job.due<next){next=job.due;title=job.title;}}else next=displayState.nextDue;
-  if(page==0){char text[48];snprintf(text,sizeof(text),"%02d:%02d       %02d.%02d.%04d",local.tm_hour,local.tm_min,local.tm_mday,local.tm_mon+1,local.tm_year+1900);drawLines(text,0);}
-  else if(page==1)drawLines(title.length()?String("Sıradaki:   ")+title:autonomous.enabled?"Takvim hazırBekleyen yok":"Masa hazır  Masa'dan    bekleniyor",0);
-  else if(page==2){if(next){int64_t minutes=std::max(int64_t(0),(next-utc+59999)/60000);drawLines("Kalan süre: "+String(double(minutes),0)+" dakika",0);}else drawLines("Bekleyen    hatırlatma  yok",0);}
-  else drawLines(WiFi.status()==WL_CONNECTED?String("Wi-Fi bağlı ")+String(autonomous.enabled?"Bağımsız    takvim açık":"Masa        takvimi açık"):"Wi-Fi yok   Takvim      cihazda",0);
+  if(!next){drawLines("Sıradaki notYok",0);return;}
+  const tm due=masa::local(next);char heading[24];
+  snprintf(heading,sizeof(heading),"%02d.%02d %02d:%02d ",due.tm_mday,due.tm_mon+1,due.tm_hour,due.tm_min);
+  if(!title.length())title="Masa'dan    hatırlatma";
+  const size_t characters=masa::characterCount(title.c_str(),title.length());
+  // A fixed two-row preview: long titles never scroll or rotate while idle.
+  if(characters>24)title=title.substring(0,masa::characterOffset(title.c_str(),title.length(),21))+"...";
+  drawLines(String(heading)+title,0);
 }
 
 bool noticeSoundAllowed() {

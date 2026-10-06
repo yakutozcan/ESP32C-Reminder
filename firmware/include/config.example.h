@@ -9,8 +9,6 @@
 #define OLED_SDA 5
 #define OLED_SCL 6
 #define OLED_ADDRESS 0x3C
-// ABRobot: 128x64 buffer, 72x40 visible window (see docs/hardware.md).
-#define OLED_X_OFFSET 30
-#define OLED_Y_OFFSET 12
+// ABRobot: native SSD1306 72x40 driver; no application-level offsets.
 #define BUZZER_PIN 3
 #define ACK_BUTTON_PIN 9

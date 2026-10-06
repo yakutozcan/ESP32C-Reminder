@@ -1,4 +1,5 @@
 import { parseCron, nextCronAfter, latestCronDue } from './cron.js';
+import { validateTags } from './tags.js';
 export { parseCron, nextCronAfter, latestCronDue } from './cron.js';
 // Calendar arithmetic deliberately uses the computer's local time zone.
 // txiki.js has Date but no Intl. Do not replace calendar days with 24h offsets.
@@ -65,7 +66,7 @@ export function validateReminder(input) {
     Object.assign(recurrence, { intervalMinutes, anchorAt, workStart, workEnd });
     if (!workStart && weekdays.length < 7) intervalAfter({ ...recurrence, weekdays }, anchorAt - 1);
   }
-  return { title, frequency: input.frequency, time,
+  return { title, tags: validateTags(input.tags), frequency: input.frequency, time,
     ...(input.frequency === 'once' ? { onceDate: input.onceDate, scheduledAt } : {}),
     ...recurrence, weekdays: ['weekly', 'interval'].includes(input.frequency) ? weekdays : [],
     monthDay: input.frequency === 'monthly' ? input.monthDay : 1,
@@ -73,7 +74,10 @@ export function validateReminder(input) {
 }
 
 // This is the shared wire recurrence shape. Engine adds id and nextDue.
-export function normalizeDeviceReminder(reminder) { return validateReminder(reminder); }
+export function normalizeDeviceReminder(reminder) {
+  const { tags, ...definition } = validateReminder(reminder);
+  return definition;
+}
 
 function intervalAfter(reminder, after) {
   const interval = reminder.intervalMinutes * MINUTE;

@@ -38,7 +38,7 @@ static_assert(BUZZER_PIN != OLED_SDA && BUZZER_PIN != OLED_SCL && BUZZER_PIN != 
               "Buzzer GPIO conflicts with OLED or button");
 static_assert(BUZZER_PIN != 18 && BUZZER_PIN != 19 && BUZZER_PIN != 8 && BUZZER_PIN != 2,
               "Choose a free GPIO: avoid USB, LED and strapping pins");
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
+U8G2_SSD1306_72X40_ER_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
 WebServer server(80);
 // GPIO8 is the board LED. BOOT remains under Masa's control (no erase-on-hold).
 AyresWiFiManager wifiManager(8, ACK_BUTTON_PIN);
@@ -220,7 +220,7 @@ void health() {
   if (!authorize()) return;
   if (!queueHealthy) { reply(503, "Persistent queue is corrupt; inspect serial monitor"); return; }
   DynamicJsonDocument doc(1024);
-  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.8.0";
+  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.8.1";
   doc["autonomous"]=autonomous.enabled;doc["timeValid"]=clockTrusted.load();doc["ownerId"]=autonomous.ownerId;doc["revision"]=autonomous.revision;
   doc["cron"]=true;doc["displaySettings"]=true;
   doc["scheduleMaxTimestamp"]=int64_t(sizeof(time_t)>=8?4102444800000LL:2145916800000LL);
@@ -301,11 +301,14 @@ void acknowledgeEvents() {
   doc["protocol"] = 4; doc["acknowledged"] = doc["ids"]; doc.remove("ids");
   String response; serializeJson(doc, response); server.send(200, "application/json", response);
 }
+bool idleClockShown=false;
+String idleClockKey;
 void drawLines(const String& text, size_t page) {
+  idleClockShown=false;
   oled.clearBuffer();
   oled.setFont(MASA_OLED_FONT); // Latin Extended includes all Turkish letters.
   // Count Unicode characters, never cut a UTF-8 sequence at a row/page boundary.
-  oled.setClipWindow(OLED_X_OFFSET, OLED_Y_OFFSET, OLED_X_OFFSET + 72, OLED_Y_OFFSET + 40);
+  oled.setClipWindow(0, 0, masa::OLED_WIDTH, masa::OLED_HEIGHT);
   for (size_t line = 0; line < masa::OLED_ROWS; line++) {
     const size_t position = page * masa::OLED_PAGE_CHARACTERS + line * masa::OLED_COLUMNS;
     size_t offset = masa::characterOffset(text.c_str(), text.length(), position);
@@ -319,9 +322,20 @@ void drawLines(const String& text, size_t page) {
       else row += '?';
       offset += character.bytes;
     }
-    oled.drawUTF8(OLED_X_OFFSET, OLED_Y_OFFSET + 11 + line * 13, row.c_str());
+    oled.drawUTF8(0, 11 + line * 13, row.c_str());
   }
   oled.sendBuffer();
+}
+void drawIdleClock(const char* time,const char* date) {
+  const String key=String(time)+date;
+  if(idleClockShown&&idleClockKey==key)return;
+  oled.clearBuffer();
+  oled.setClipWindow(0,0,masa::OLED_WIDTH,masa::OLED_HEIGHT);
+  oled.setFont(MASA_OLED_CLOCK_FONT);
+  oled.drawUTF8((masa::OLED_WIDTH-oled.getUTF8Width(time))/2,masa::OLED_CLOCK_BASELINE,time);
+  oled.setFont(MASA_OLED_FONT);
+  oled.drawUTF8((masa::OLED_WIDTH-oled.getUTF8Width(date))/2,masa::OLED_DATE_BASELINE,date);
+  oled.sendBuffer();idleClockShown=true;idleClockKey=key;
 }
 String randomKey() {
   char key[33];
@@ -330,7 +344,7 @@ String randomKey() {
   return String(key);
 }
 void printStatus() {
-  Serial.println("Masa firmware 0.8.0 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
+  Serial.println("Masa firmware 0.8.1 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
   Serial.println("Pending button events: " + String(events.size()));
   Serial.println("Sound task: " + String(soundCommands ? "ready" : "unavailable"));
   Serial.println("OLED I2C: " + String(oledPresent ? "detected at 0x3C" : "not detected"));
@@ -577,6 +591,9 @@ void loop() {
     if (buttonAction == masa::ButtonAction::Complete) finishNotice("completed");
     else if (buttonAction == masa::ButtonAction::Snooze) finishNotice("snoozed");
     else finishNotice();
+  }
+  else if(buttonAction==masa::ButtonAction::Dismiss&&!active&&queue.empty()&&!setupMode&&buttonNoticeId.length()==0) {
+    idleState.inspect(now);lastDraw=0;
   }
   const bool feedback = actionFeedback.length() && millis() - feedbackSince < 2500;
   if (!feedback) actionFeedback = "";

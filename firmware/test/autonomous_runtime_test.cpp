@@ -18,6 +18,7 @@ public:
   String(int value):std::string(std::to_string(value)){}
   String(double value,int precision):std::string(){std::ostringstream out;out<<std::fixed<<std::setprecision(precision)<<value;assign(out.str());}
   bool startsWith(const String& prefix)const{return compare(0,prefix.size(),prefix)==0;}
+  String substring(size_t from,size_t to)const{return substr(from,to-from);}
 };
 namespace ArduinoJson {
 template<>struct Converter<String> {
@@ -46,10 +47,10 @@ struct Server {
   void send(int code,const char*,const String& text){status=code;response=text;}
 } server;
 struct SerialMock{void println(const char*){}} Serial;
-struct OLED{void setPowerSave(bool){}void setContrast(unsigned){}} oled;
-struct Network{int status(){return 3;}} WiFi;
-constexpr int WL_CONNECTED=3;
-void drawLines(const String&,size_t){}
+struct OLED{bool sleeping=false;unsigned contrast=0;void setPowerSave(bool value){sleeping=value;}void setContrast(unsigned value){contrast=value;}} oled;
+String renderedText,renderedTime,renderedDate;bool renderedClock=false;
+void drawLines(const String& text,size_t page){assert(page==0);renderedText=text;renderedClock=false;}
+void drawIdleClock(const char* time,const char* date){renderedTime=time;renderedDate=date;renderedClock=true;}
 void setSound(bool){}
 bool authorize(){return true;}
 void reply(int code,const char* message){server.status=code;server.response=message;}
@@ -60,7 +61,7 @@ bool saveQueue();
 #include "autonomous_runtime.h"
 int persistenceCount=0;String storedDisplay;
 bool saveQueue(){++persistenceCount;if(!persistenceOK)return false;DynamicJsonDocument document(2048);displayStateJson(document.to<JsonObject>(),displayState,true);std::string value;serializeJson(document,value);storedDisplay=value;return true;}
-void reset(){displayState=masa::DisplayState{};persistenceCount=0;storedDisplay="";autonomous=AutonomousState{};queue.clear();recent.clear();events.clear();clockTrusted=false;active=false;persistenceOK=true;uptime+=1000;setenv("TZ","UTC0",1);tzset();}
+void reset(){idleState=masa::IdleState{};renderedText="";renderedClock=false;displayState=masa::DisplayState{};persistenceCount=0;storedDisplay="";autonomous=AutonomousState{};queue.clear();recent.clear();events.clear();clockTrusted=false;active=false;persistenceOK=true;uptime+=1000;setenv("TZ","UTC0",1);tzset();}
 String payload(uint32_t revision=1,const String& owner="desk",bool enabled=true) {
   DynamicJsonDocument doc(8192);
   doc["ownerId"]=owner;doc["revision"]=revision;doc["enabled"]=enabled;doc["timezone"]="UTC0";doc["utcNow"]=fakeUtc;
@@ -148,5 +149,32 @@ int main(){
   reset();autonomous.enabled=false;idleState.awakeSince=0;uptime=1000000;postDisplay(displayPayload(fakeUtc+600000));postDisplay(displayPayload());assert(!displayState.previousDue);assert(idleDisplayContrast(uptime)==0);
   reset();post(payload());idleState.awakeSince=0;uptime=1000000;autonomous.reminders.front().nextDue=fakeUtc+600000;displayState.nextDue=fakeUtc+86400000;assert(idleDisplayContrast(uptime)==180);autonomous.reminders.front().enabled=false;assert(idleDisplayContrast(uptime)==0);autonomous.deferred.push_back(timer());autonomous.deferred.front().due=fakeUtc+600000;assert(idleDisplayContrast(uptime)==180);clockTrusted=false;assert(idleDisplayContrast(uptime)==0);
   clockTrusted=true;autonomous.deferred.clear();markDisplayNotice();assert(idleDisplayContrast(uptime)==180);fakeUtc+=600000;assert(idleDisplayContrast(uptime)==0);
-  std::cout<<"Actual firmware API, ownership, revisions, timer races, quiet melody and rollback tests passed\n";
+  // Always-on is a stable clock, even at the old five-second page boundaries.
+  reset();post(payload());displayState.settings.alwaysOn=true;
+  autonomous.reminders.front().nextDue=fakeUtc+3600000;
+  const auto scheduleBefore=autonomous.revision;const auto timerBefore=autonomous.reminders.front().nextDue;
+  drawIdle(uptime);assert(renderedClock);const auto timeBefore=renderedTime,dateBefore=renderedDate;
+  for(unsigned elapsed : {5000u,10000u,15000u,20000u,60000u}){drawIdle(uptime+elapsed);assert(renderedClock&&renderedTime==timeBefore&&renderedDate==dateBefore);assert(!oled.sleeping);}
+  assert(autonomous.revision==scheduleBefore&&autonomous.reminders.front().nextDue==timerBefore&&queue.empty()&&events.empty());
+  // Manual preview stays on one frame for ten seconds and respects UTF-8 boundaries.
+  autonomous.reminders.front().title="Çığ öşü uzun bir hatırlatıcı başlığı";
+  idleState.inspect(uptime);drawIdle(uptime);assert(!renderedClock);
+  const auto preview=renderedText;assert(masa::characterCount(preview.c_str(),preview.length())==36);assert(preview.substr(preview.length()-3)=="...");
+  drawIdle(uptime+5000);assert(!renderedClock&&renderedText==preview);
+  drawIdle(uptime+9999);assert(!renderedClock&&renderedText==preview);
+  drawIdle(uptime+10000);assert(renderedClock);
+  // Offline snoozes precede a later regular reminder; desktop mode uses its hint.
+  autonomous.deferred.push_back(timer());autonomous.deferred.front().title="Erteleme";
+  idleState.inspect(uptime);drawIdle(uptime);assert(renderedText.find("Erteleme")!=std::string::npos);
+  autonomous.enabled=false;displayState.nextDue=fakeUtc+86400000;
+  idleState.inspect(uptime);drawIdle(uptime);assert(renderedText.find("Masa'dan")!=std::string::npos);
+  displayState.nextDue=0;drawIdle(uptime);assert(renderedText=="Sıradaki notYok");
+  // Time/storage errors remain visible; normal sleep and scheduled wake still work.
+  clockTrusted=false;drawIdle(uptime);assert(!renderedClock&&renderedText.find("Saat")!=std::string::npos);
+  queueHealthy=false;drawIdle(uptime);assert(renderedText.find("Depo")!=std::string::npos);queueHealthy=true;
+  clockTrusted=true;idleState.wake(uptime);displayState.settings.alwaysOn=false;displayState.settings.wakeBeforeMinutes=0;displayState.settings.wakeAfterMinutes=0;displayState.lastNoticeAt=0;
+  drawIdle(uptime+60000);assert(oled.contrast==40&&!oled.sleeping);drawIdle(uptime+120000);assert(oled.sleeping);
+  displayState.settings.wakeBeforeMinutes=10;displayState.nextDue=fakeUtc+600000;
+  drawIdle(uptime+120000);assert(!oled.sleeping&&oled.contrast==180&&renderedClock);
+  std::cout<<"Actual firmware API, ownership, timer races, quiet melody, rollback and calm idle display tests passed\n";
 }

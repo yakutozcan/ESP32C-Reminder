@@ -277,8 +277,14 @@ then powers down. Window rendering does not extend the idle timer.
 
 ## OLED, simulator and provisioning
 
-Active notices take priority over idle clock/date, next title, countdown and
-connection/clock state, rotating every five seconds. Default idle contrast dims
+Firmware 0.8.1 keeps an idle clock/date on a single fixed screen, with no automatic
+page rotation or countdown. The large clock has no seconds or blinking separator;
+its frame is refreshed only when the time/date changes or another screen replaces it.
+A short BOOT press while idle shows the next reminder's date/time and a fixed
+two-row title preview for ten seconds, then returns to the clock. Desktop mode
+shows the supplied next-time hint; reminder titles are available in device mode.
+This preview creates no completion/snooze events and does not mutate the schedule.
+Active notices and storage/time errors take priority. Default idle contrast dims
 at 60 seconds and turns off at 120 seconds; configured display settings and
 reminder windows override these defaults. BOOT or a new notice wakes it. The
 72×40 OLED displays 12 characters × 3 rows in a Latin Extended 6×12 font with

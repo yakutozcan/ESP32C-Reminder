@@ -64,14 +64,20 @@ kontrolleri geçti; fiziksel kart ve güç kesintisi testi bekliyor.
 Sessiz bildirimde ve ayarlanan sessiz saatlerde yalnızca ekran çalışır.
 Aktif buzzer kendi sabit tonunu üretir; bu melodi için pasif buzzer gerekir.
 
-U8g2 SSD1306 128×64 tamponu `(30,12)` başlangıcında 72×40 pencereye kırpılır.
+U8g2 `U8G2_SSD1306_72X40_ER_F_HW_I2C` sürücüsü doğrudan 72×40 paneli
+başlatır. Çizim koordinatları `(0,0)` ile başlar; eski `(30,12)` uygulama
+ofseti kullanılmaz. Sürücü panelin 40 satırlık multiplex ayarını yönetir.
 SDA=5, SCL=6, I²C=0x3C. Türkçe harfleri içeren `u8g2_font_6x12_te` yazı tipiyle 12 karakter × 3 satır gösterilir;
 sayfalar 3,5 saniyede değişir, bir bildirim en az 10 saniye görünür. Metinler UTF-8
 olarak çizilir; `ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü` korunur. Satır ve sayfa sınırları bayt
 sayısına göre bölünmez. Yazı tipinde olmayan karakterler yalnızca görüntülemede
 `?` olur; orijinal başlık cihaz kuyruğunda korunur.
 
-Bildirim bulunmadığında saat, sıradaki not ve kalan süre 5 saniyede bir değişir.
+Firmware 0.8.1'de bildirim bulunmadığında büyük saat ve tarih sabit kalır;
+otomatik sayfa değişimi, yanıp sönen saniyeler ve geri sayım yoktur.
+BOOT'a kısa basınca sıradaki notun tarih/saati ve başlık önizlemesi 10 saniye
+tek ekranda görünür; sonra saate döner. Uzun başlık önizlemesi iki satırla
+sınırlanır; gerçek bildirimde başlığın tamamı mevcut sayfalama ile gösterilir.
 Boşta ekran 60 saniyede kısılır, 120 saniyede kapanır; BOOT veya yeni bildirim
 uyandırır. Boş ekranda BOOT'a basmak tamamlandı ya da erteleme oluşturmaz.
 Saat eşitlenmemişse cihaz bekleme durumunu gösterir.
@@ -104,8 +110,8 @@ görüntülenebilir; yeni kaydın eski sürüm tarafından okunacağını varsay
    `Çç Ğğ İı Öö Şş Üü Türkçe testi` metnini kontrol et.
 6. Takvimi cihaza aktarıp bilgisayarı kapat; hatırlatma, çift basış ve cihazda
    15 dakika ertelemeyi doğrula. Sonra Masa'yı açıp geçmişi eşitle.
-7. Gerçek OLED'de boşta 5 saniyelik bilgi değişimini, 60 saniyede kısılmayı,
-   120 saniyede kapanmayı ve BOOT ile uyanmayı kontrol et.
+7. Gerçek OLED'de sabit büyük saat/tarihi, BOOT ile 10 saniyelik sıradaki not
+   önizlemesini, 60 saniyede kısılmayı ve 120 saniyede kapanmayı kontrol et.
 8. Gücü kesip yeniden ver; güvenilir saat gelmeden bildirim üretilmediğini,
    NTP veya Masa ile eşitlemeden sonra takvim ve düğme olaylarının korunduğunu doğrula.
 
@@ -191,3 +197,52 @@ ekran ayarı testi boyunca birebir korundu; mevcut hatırlatıcılar değiştiri
 Bu kontrol API ve depolama davranışını doğrular. OLED'in gerçek 10 dakika
 öncesi/sonrası aralığında görünür olması ayrıca fiziksel gözlem gerektirir;
 zaman sınırları, sıfır aralık, çakışma ve bildirim önceliği C++ testlerinde doğrulandı.
+
+### Sakin OLED — firmware 0.8.1
+
+6 Ekim 2026'da aynı ESP32-C3 rev. 0.4 USB kart 0.8.0 → 0.8.1 güncellendi.
+Önce yerel kayıt, cihaz takvimi ve ekran ayarları özel klasöre kaydedildi.
+4 MB tam flash yedeği
+`~/Library/Application Support/Masa/device-backups/20261006-163606-before-0.8.1/`
+altındadır. ROM'dan alınan tüm-flash MD5 ile yedeğin birebir eşleşmesi ve
+SHA-256 bütünlüğü doğrulandı. USB yardımcı yükleyicisi yanıt vermediği için
+ROM üzerinden hash karşılaştırması yapıldı: mevcut doğrulanmış görüntüde
+farklı çıkan bloklar karttan yeniden okundu; son tam görüntünün hash'i
+kartın tüm flash hash'iyle eşleşti. Yedekteki cihaz anahtarı ve bölüm tablosu
+ile hedef kart kimliği ve uygulama adresi ayrıca doğrulandı.
+
+`--no-stub` ile yalnızca `0x10000` uygulama alanına yazıldı; yüklemenin hash
+kontrolü geçti. Dosya sistemi/NVS, bootloader ve bölüm tablosu yüklenmedi.
+Gerçek HTTP'de firmware **0.8.1**, protokol **4** ve NTP ile güvenilir saat
+okundu. Aynı cihaz anahtarıyla erişim, takvim sahibi/sürümü/etkinliği,
+hatırlatıcılar, ertelemeler, geçmiş, sessiz saatler ve ekran ayarları birebir
+korundu. Derlenmiş görüntü `dist/Masa-firmware-0.8.1-ESP32C3.bin` dosyasıdır.
+
+Sabit büyük saat/tarih, BOOT ile 10 saniyelik sabit not önizlemesi, Türkçe
+başlık sınırları ve uyku/uyanma politikası yazılım testlerinde doğrulandı.
+Gerçek OLED okunabilirliği ve fiziksel BOOT gözlemi henüz onaylanmadı.
+
+Saatin ekrana sığmadığı kullanıcı geri bildirimi üzerine saat çizimi 4 piksel
+aşağı alındı (`OLED_Y_OFFSET + 21` → `+ 25`); tarih konumu korundu.
+Gerçek yazı tipiyle 72×40 sınır testi ve derleme geçti. Aynı firmware 0.8.1'in
+bu düzeltmesi karta yüklendi; yazma hash'i, NTP ve mevcut kayıtların korunması
+doğrulandı. Yükleme öncesi tam flash yedeği özel `device-backups` klasöründeki
+`before-clock-position` kaydındadır. Düzeltilmiş konumun fiziksel gözlemi bekliyor.
+
+İkinci fotoğrafta (`IMG_1253.jpg`) saatin üst çizgileri hâlâ kesilmişti.
+128×64 sürücüde yazılımın varsaydığı `(30,12)` pencere testi bu fiziksel
+görüntüyü yakalamadığı için, 0.42 inç panelin kendi SSD1306 72×40 sürücüsüne
+geçildi. Saat ve tarih doğrudan panel koordinatlarında 25 ve 37 taban
+çizgisine yerleştirildi. Yeni test gerçek sürücünün 40 satırlık multiplex ve
+sıfır ekran ofseti komutlarını doğrular; gün içindeki 1.440 saat değerinin
+piksel sayısını kırpılmamış yazı tipi çıktısıyla karşılaştırır. Türkçe metin,
+bağımsız çalışma ve düğme testleri ile firmware derlemesi geçti.
+
+Bu düzeltme de firmware 0.8.1 olarak karta yüklendi. Yeni görüntünün SHA256
+değeri `74edfb466035e454297c5520835af63c54675624e27b94de0edd37d1a920becb`
+ve yazma hash kontrolü başarılıdır. Yükleme öncesi 4 MB flash yedeği
+`before-native-oled` kaydında cihazın tam flash MD5'i ile doğrulandı.
+Yüklemeden sonra özgün anahtarla HTTP erişimi, OLED I²C algısı ve güvenilir
+saat doğrulandı; takvim, zaman dilimi, sessiz saatler, imleçler, ertelemeler,
+geçmiş ve ekran ayarları korundu. Kullanıcı yeni sürücüyle saatin fiziksel
+ekrana sığdığını doğruladı.

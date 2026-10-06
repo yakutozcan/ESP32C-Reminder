@@ -3,6 +3,7 @@ import { validateDevice, validateDeviceJob, validateScheduleReply, validateDispl
 
 import { createBackup, parseBackup } from './backup.js';
 import { validateSettings, deviceDisplaySettings } from './settings.js';
+import { validateTags } from './tags.js';
 
 const defaultScheduler = () => ({ mode: 'desktop', desired: false, ownerId: '', revision: 0, syncedRevision: null });
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -53,6 +54,7 @@ export function migrateState(saved) {
       throw new Error('Zamanlayıcı sahiplik kaydı geçerli değil. Veriyi yedeklemeden sıfırlama.');
   }
   state.version = 7;
+  for (const reminder of state.reminders) if (reminder.tags !== undefined) reminder.tags = validateTags(reminder.tags);
   return state;
 }
 
@@ -114,6 +116,11 @@ export class ReminderEngine {
       const state = this.snapshot();
       const index = state.reminders.findIndex(r => r.id === input.id);
       if (input.id && index < 0) throw new Error('Hatırlatıcı bulunamadı.');
+      if (index >= 0 && JSON.stringify(normalizeDeviceReminder(state.reminders[index])) === JSON.stringify(normalizeDeviceReminder(value))) {
+        state.reminders[index].tags = value.tags;
+        await this.commit(state);
+        return state.reminders[index];
+      }
       if (index < 0 && state.scheduler.mode === 'device' && state.reminders.length >= 24) throw new Error('Bağımsız cihaz en fazla 24 hatırlatıcı saklar.');
       if (index < 0 && state.reminders.length >= 100) throw new Error('En fazla 100 hatırlatıcı ekleyebilirsin.');
       const nextDue = nextAfter(value, this.clock());
@@ -252,6 +259,8 @@ export class ReminderEngine {
       const imported = parsed.reminders.map(r => {
         const existing = state.reminders.find(value => value.id === r.id);
         if (existing && JSON.stringify({ id: existing.id, ...validateReminder(existing) }) === JSON.stringify(r)) return existing;
+        if (existing && JSON.stringify(normalizeDeviceReminder(existing)) === JSON.stringify(normalizeDeviceReminder(r)))
+          return { ...existing, tags: r.tags };
         changedIds.add(r.id);
         const nextDue = nextAfter(r, now);
         return { ...r, nextDue, ...(r.frequency === 'once' && nextDue === null ? { enabled: false } : {}) };

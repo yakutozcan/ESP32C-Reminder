@@ -1,3 +1,5 @@
+import { filterReminders, reminderTags } from './reminder-list.js';
+
 const $ = selector => document.querySelector(selector);
 const form = $('#reminder-form');
 const deviceForm = $('#device-form');
@@ -11,6 +13,9 @@ const api = (method, params = {}) => {
 let state;
 let view = 'all';
 let filter = 'all';
+let query = '';
+let statusFilter = 'all';
+let tagFilter = '';
 let editId;
 let snoozeId;
 let mutationBusy = false;
@@ -73,7 +78,7 @@ function updateDisplayFields() {
 preferencesForm.elements.displayAlwaysOn.onchange = updateDisplayFields;
 function render() {
   if (!state) return;
-  const key = JSON.stringify([view, filter, state.reminders, state.jobs, state.connection, state.scheduler, state.settings, state.displayStatus, state.lastError, Math.floor(state.now / 60000), new Date().toDateString()]);
+  const key = JSON.stringify([view, filter, query, statusFilter, tagFilter, state.reminders, state.jobs, state.connection, state.scheduler, state.settings, state.displayStatus, state.lastError, Math.floor(state.now / 60000), new Date().toDateString()]);
   if (key === renderedState) return;
   renderedState = key;
   $('#today-label').textContent = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -98,6 +103,8 @@ function render() {
   $('#page-title').textContent = view === 'completed' ? 'Bugün yaptıkların.' : view === 'history' ? 'Masana ulaşan notlar.' : view === 'today' ? 'Bugün, aklında kalmasın.' : 'Günün küçük notları.';
   $('#page-description').textContent = view === 'completed' ? 'Yapıldı olarak işaretlediğin işler burada. Tekrar takvimlerin devam eder.' : view === 'history' ? 'Teslimatları ve bekleyen bildirimleri buradan takip et.' : 'Rutinlerini bir kez yaz. Zamanı gelince masan hatırlatsın.';
   $('#filters').hidden = history;
+  $('#agenda-search').hidden = history;
+  $('#filter-summary').hidden = history;
   $('#week-strip').hidden = history;
   $('#list-heading').textContent = view === 'completed' ? 'Bugün tamamlanan işler' : view === 'history' ? 'Bildirim geçmişi' : 'Hatırlatıcılar';
   const el = $('#reminders');
@@ -116,11 +123,22 @@ function render() {
     }).join('') : `<div class="empty"><span class="empty-mark" aria-hidden="true">∴</span><h3>${view === 'completed' ? 'Bugün henüz tamamlanan iş yok.' : 'Henüz bildirim yok.'}</h3><p>${view === 'completed' ? 'Bildirim geçmişindeki Yaptım düğmesiyle veya cihazda çift basışla işaretle.' : 'Hatırlatıcının zamanı geldiğinde teslimat durumu burada görünür.'}</p></div>`;
     return;
   }
-  const reminders = state.reminders.filter(r => (filter === 'all' || r.frequency === filter) && (view !== 'today' || r.enabled && sameDay(r.nextDue, Date.now()))).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.nextDue - b.nextDue);
+  const tags = reminderTags(state.reminders);
+  $('#tag-filter').innerHTML = '<option value="">Tüm etiketler</option><option value="untagged">Etiketsiz</option>' + tags.map(tag => `<option value="tag:${escapeHTML(tag)}">${escapeHTML(tag)}</option>`).join('');
+  if (tagFilter.startsWith('tag:') && !tags.includes(tagFilter.slice(4))) {
+    // Retain a removed label until the user clears it; never silently widen the results.
+    $('#tag-filter').insertAdjacentHTML('beforeend', `<option value="${escapeHTML(tagFilter)}">${escapeHTML(tagFilter.slice(4))} · artık kullanılmıyor</option>`);
+  }
+  $('#tag-filter').value = tagFilter;
+  const reminders = filterReminders(state.reminders, { query, status: statusFilter, frequency: filter, tag: tagFilter, today: view === 'today', now: state.now });
+  const filtered = Boolean(query || statusFilter !== 'all' || filter !== 'all' || tagFilter);
+  $('#clear-filters').hidden = !filtered;
+  $('#filter-summary').hidden = !filtered;
+  $('#filter-summary').textContent = reminders.length + ' hatırlatıcı eşleşti.';
   const enabled = state.reminders.filter(r => r.enabled).length;
   const ended = state.reminders.filter(r => r.frequency === 'once' && r.nextDue === null).length;
   $('#summary').textContent = enabled + ' etkin · ' + (state.reminders.length - enabled - ended) + ' duraklatılmış' + (ended ? ' · ' + ended + ' zamanı geçmiş' : '');
-  el.innerHTML = reminders.length ? reminders.map(r => `<article class="reminder-row ${r.enabled ? '' : 'paused'}"><div class="reminder-time">${['interval', 'cron'].includes(r.frequency) ? r.nextDue ? new Date(r.nextDue).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—' : r.time}</div><div><h3 class="reminder-title">${escapeHTML(r.title)}</h3><p class="reminder-detail">${repeatText(r)} · ${r.enabled ? 'Sıradaki: ' + dateText(r.nextDue) : r.nextDue === null ? 'Takvim sona erdi' : 'Duraklatıldı'} · ${r.melody === 'chime' ? 'Kısa melodi' : 'Sessiz'}</p></div><div class="row-actions">${r.nextDue === null ? '' : `<button data-action="toggle" data-id="${escapeHTML(r.id)}" aria-label="${escapeHTML(r.title)}: ${r.enabled ? 'duraklat' : 'başlat'}">${r.enabled ? 'Duraklat' : 'Başlat'}</button>`}<button data-action="edit" data-id="${escapeHTML(r.id)}">Düzenle</button><button data-action="delete" data-id="${escapeHTML(r.id)}">Sil</button></div></article>`).join('') : `<div class="empty"><span class="empty-mark" aria-hidden="true">∴</span><h3>${state.reminders.length ? 'Bu görünümde not yok.' : 'İlk notunu bırak.'}</h3><p>${state.reminders.length ? 'Diğer tekrarları görebilir veya yeni bir hatırlatıcı ekleyebilirsin.' : 'Su içmek, bitkileri sulamak, bir mola vermek. Tekrar eden küçük işleri Masa’ya bırak.'}</p><button class="primary" data-action="add">Hatırlatıcı ekle</button></div>`;
+  el.innerHTML = reminders.length ? reminders.map(r => `<article class="reminder-row ${r.enabled ? '' : 'paused'}"><div class="reminder-time">${['interval', 'cron'].includes(r.frequency) ? r.nextDue ? new Date(r.nextDue).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—' : r.time}</div><div><h3 class="reminder-title">${escapeHTML(r.title)}</h3><p class="reminder-detail">${repeatText(r)} · ${r.enabled ? 'Sıradaki: ' + dateText(r.nextDue) : r.nextDue === null ? 'Takvim sona erdi' : 'Duraklatıldı'} · ${r.melody === 'chime' ? 'Kısa melodi' : 'Sessiz'}</p>${r.tags?.length ? '<ul class="reminder-tags" aria-label="Etiketler">' + r.tags.map(tag => '<li>' + escapeHTML(tag) + '</li>').join('') + '</ul>' : ''}</div><div class="row-actions">${r.nextDue === null ? '' : `<button data-action="toggle" data-id="${escapeHTML(r.id)}" aria-label="${escapeHTML(r.title)}: ${r.enabled ? 'duraklat' : 'başlat'}">${r.enabled ? 'Duraklat' : 'Başlat'}</button>`}<button data-action="edit" data-id="${escapeHTML(r.id)}">Düzenle</button><button data-action="delete" data-id="${escapeHTML(r.id)}">Sil</button></div></article>`).join('') : `<div class="empty"><span class="empty-mark" aria-hidden="true">∴</span><h3>${state.reminders.length ? 'Bu görünümde not yok.' : 'İlk notunu bırak.'}</h3><p>${state.reminders.length ? 'Arama ve filtreleri değiştirebilir veya yeni bir hatırlatıcı ekleyebilirsin.' : 'Su içmek, bitkileri sulamak, bir mola vermek. Tekrar eden küçük işleri Masa’ya bırak.'}</p><button class="primary" data-action="add">Hatırlatıcı ekle</button></div>`;
 }
 function updateRecurrenceFields() {
   const selected = form.elements.frequency.value;
@@ -155,14 +173,17 @@ function reminderInput() {
   const selected = form.elements.frequency.value;
   const simple = Object.hasOwn(simpleIntervals, selected);
   const existing = state?.reminders.find(r => r.id === editId);
+  const rescheduled = existing?.frequency === 'once' && existing.nextDue === null &&
+    (selected !== 'once' || form.elements.onceDate.value !== existing.onceDate || form.elements.time.value !== existing.time);
   return { id: editId, title: form.elements.title.value, frequency: simple ? 'interval' : selected,
+    tags: form.elements.tags.value.split(',').map(tag => tag.trim()).filter(Boolean),
     ...(selected === 'cron' ? { cronExpression: form.elements.cronExpression.value } : { time: form.elements.time.value }),
     weekdays: simple ? [0, 1, 2, 3, 4, 5, 6] : [...$('#weekday-field').querySelectorAll('input:checked')].map(b => Number(b.value)),
     onceDate: form.elements.onceDate.value, monthDay: Number(form.elements.monthDay.value), melody: form.elements.melody.value,
     weekInterval: Number(form.elements.weekInterval.value), anchorDate: form.elements.anchorDate.value,
     intervalMinutes: simple ? simpleIntervals[selected] : Number(form.elements.intervalMinutes.value), anchorAt: existing?.anchorAt ?? Date.now(),
     ...(selected === 'interval' && form.elements.workHours.checked ? { workStart: form.elements.workStart.value, workEnd: form.elements.workEnd.value } : {}),
-    enabled: existing ? existing.nextDue === null || existing.enabled : true };
+    enabled: existing ? rescheduled || existing.enabled : true };
 }
 function cancelPreview() {
   previewGeneration++; clearTimeout(previewTimer);
@@ -199,6 +220,7 @@ $('#reminder-dialog').addEventListener('close', cancelPreview);
 function openReminder(reminder) {
   form.reset(); editId = reminder?.id;
   form.elements.id.value = editId || '';
+  form.elements.tags.value = (reminder?.tags || []).join(', ');
   $('#reminder-error').textContent = '';
   $('#reminder-heading').textContent = reminder ? 'Notunu düzenle.' : 'Bir not bırak.';
   form.elements.onceDate.value = reminder?.onceDate || localDate(new Date());
@@ -241,6 +263,15 @@ for (const button of document.querySelectorAll('[data-view]')) button.onclick = 
 for (const button of document.querySelectorAll('[data-filter]')) button.onclick = () => {
   filter = button.dataset.filter;
   document.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', b === button)); render();
+};
+$('#reminder-search').oninput = e => { query = e.target.value; render(); };
+$('#status-filter').onchange = e => { statusFilter = e.target.value; render(); };
+$('#tag-filter').onchange = e => { tagFilter = e.target.value; render(); };
+$('#clear-filters').onclick = () => {
+  query = ''; statusFilter = 'all'; tagFilter = ''; filter = 'all';
+  $('#reminder-search').value = ''; $('#status-filter').value = 'all';
+  document.querySelectorAll('[data-filter]').forEach(button => button.setAttribute('aria-pressed', button.dataset.filter === 'all'));
+  render(); $('#reminder-search').focus();
 };
 async function withBusy(button, action, errorTarget) {
   if (mutationBusy) return;

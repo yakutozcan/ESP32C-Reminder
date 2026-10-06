@@ -3,13 +3,18 @@
 Başlangıç: 5 Ekim 2026. Özellikler mevcut yerel çalışma modelini koruyarak,
 her aşamada kullanılabilir ve doğrulanmış bir sürüm oluşturacak şekilde eklenir.
 
-**Güncel durum: 6 Ekim 2026, Masa 0.8.1 / firmware 0.8.0.** İlk altı aşamanın
-yazılımı tamamlandı; kolay tekrarlar ve cron 7. aşamada eklendi. 138 uygulama
+**Güncel durum: 6 Ekim 2026, Masa 0.8.1 / firmware 0.8.1.** İlk altı aşamanın
+yazılımı tamamlandı; kolay tekrarlar ve cron 7. aşamada eklendi. 154 uygulama
 testi, firmware testleri ve 0.8.1 macOS paketinin sürüm/imza kontrolü geçti.
-Kartın tam yedeği alındı; firmware 0.8.0 yüklendi. Ekran ayarlarının yeniden
+Kartın tam yedeği alındı; firmware 0.8.1 yüklendi. Ekran ayarlarının yeniden
 başlatma sonrası kalıcılığı ve mevcut takvim/bağlantı/geçmişin korunması doğrulandı.
 İlk iki aşama kendi tarihsel sürümlerini kaydeder; donanım doğrulaması ve kalan
 işler aşağıda ayrı belirtilir.
+
+6 Ekim 2026 kaynak güncellemesi: 9. aşamanın arama/filtreleme ve kullanıcı
+etiketleri tamamlandı. Bu değişikliklerin doğrulaması 9. aşamada kayıtlıdır.
+Firmware 0.8.1 kaynak güncellemesi boşta OLED'i sabit saat/tarih görünümüne
+geçirir; sıradaki not yalnızca BOOT ile kısa süreli açılır.
 
 ## 1. Tek seferlik hatırlatma ve uygulamadan erteleme
 
@@ -186,7 +191,22 @@ aralıkları ve boşta kapanmayı geçersiz kılar. BOOT ve aktif bildirimler ö
 
 ## Son doğrulama ve paket
 
-- [x] 138 uygulama testi; eski kayıt geçişleri, takvim/DST, yedekleme, sahiplik,
+**6 Ekim 2026 · sakin OLED kaynak güncellemesi (firmware 0.8.1):** boşta
+5 saniyelik otomatik sayfa değişimi ve kalan süre ekranı kaldırıldı. Büyük
+saat/tarih sabit kalır; aynı dakika içinde tekrar çizilmez. BOOT'a kısa basınca
+sıradaki notun tarih/saati ve iki satırlık başlık önizlemesi 10 saniye görünür,
+sonra saate dönülür. Gerçek bildirimler, saat/depo uyarıları, kısılma/kapanma
+ve uyanma aralıkları önceliklerini korur. Protokol 4 ve kalıcı kayıt biçimleri
+korunur. Gerçek yazı tipiyle 72×40 sınırlar, sabit boşta görünüm, Türkçe uzun
+başlık, önizleme süresi, sayaç taşması, cihaz/masaüstü modu ve uyku/uyanma
+kontrolleri yazılımda doğrulandı. 72×40 panel sürücüsüne geçişten sonra kullanıcı
+saatin fiziksel ekrana sığdığını onayladı; BOOT gözlemi bekliyor.
+4 MB tam flash görüntüsü cihazın ROM hash'iyle doğrulanıp özel klasöre
+kaydedildi. USB'de yalnızca uygulama bölümüne yükleme ve yazma hash kontrolü
+geçti; gerçek HTTP'de firmware 0.8.1, NTP ve takvim/sahiplik/geçmiş/ertelemeler,
+sessiz saatler, ekran ayarları ve aynı cihaz anahtarının korunması doğrulandı.
+
+- [x] 154 uygulama testi; eski kayıt geçişleri, takvim/DST, yedekleme, sahiplik,
       kaybolan yanıtlar ve çevrimdışı erteleme senaryoları.
 - [x] Firmware derlemesi; OLED/düğme C++ testleri, takvim/atomik depolama ve
       gerçek firmware başlıklarıyla API testleri.
@@ -196,13 +216,13 @@ aralıkları ve boşta kapanmayı geçersiz kılar. BOOT ve aktif bildirimler ö
 - [x] Masa 0.8.1 macOS Apple Silicon paketinin son kaynaklarla derlenmesi;
       paket sürümü ve imzasının doğrulanması.
 - [x] Masa'ya özel krem/yeşil masa saati ikonu; şeffaf PNG kaynak ve macOS ICNS paketi.
-- [x] Masa 0.8.1 ZIP ve firmware 0.8.0 BIN test çıktıları; SHA-256 listesi ve kısa test notları.
+- [x] Masa 0.8.1 ZIP ve firmware 0.8.1 BIN test çıktıları; SHA-256 listesi ve kısa test notları.
 - [x] Gerçek USB kartta yükleme, NTP, bağımsız takvim, yeniden başlatma ve
       uygulamayla devir/eşitleme. Ayrıntılar [donanım kaydında](hardware.md#usb-kart-doğrulaması--6-ekim-2026).
 
 ## Fiziksel testler ve paket kontrolleri
 
-Mevcut 0.8.1 / 0.8.0 sürümünün kalan kontrolleri aşağıdadır. Yeni özellikler
+Mevcut Masa/firmware 0.8.1 sürümünün kalan kontrolleri aşağıdadır. Yeni özellikler
 sonraki bölümde öneri olarak planlanmıştır; henüz yapılmayan kontroller
 tamamlandı sayılmaz.
 
@@ -225,10 +245,10 @@ tamamlandı sayılmaz.
 
 ## Yeni özellik roadmap'i
 
-6 Ekim 2026 önerileri. Aşağıdaki maddeler henüz uygulanmadı; sürüm ve tarih
+6 Ekim 2026 planı. İşaretli maddeler kaynak kodda tamamlandı; diğerleri sürüm ve tarih
 taahhüdü değildir. P1 bir sonraki geliştirme grubu, P2 sonraki grup, P3 kapsam
-kararı gerektiren daha büyük işlerdir. Önce kullanıcının mevcut paketle yaptığı
-testte çıkan hatalar giderilir; sonra **9. aşama** ile başlanması önerilir.
+kararı gerektiren daha büyük işlerdir. Kullanıcının mevcut paketle yaptığı
+testte çıkan hatalar önceliklidir; **9. aşama** arama ve etiketlerle başladı.
 
 | Aşama | Öncelik | Kullanıcıya katkısı | Etkilenen alan |
 | --- | --- | --- | --- |
@@ -241,12 +261,29 @@ testte çıkan hatalar giderilir; sonra **9. aşama** ile başlanması önerilir
 
 ### 9. Hızlı kullanım ve düzenleme
 
-- [ ] Başlığa göre arama; etkin/duraklatılmış, tekrar türü ve etikete göre filtreleme.
-- [ ] İş, kişisel ve rutin gibi kullanıcı tarafından belirlenen etiketler.
+- [x] Başlığa göre arama; etkin/duraklatılmış, tekrar türü ve etikete göre filtreleme.
+- [x] İş, kişisel ve rutin gibi kullanıcı tarafından belirlenen etiketler.
 - [ ] Hatırlatıcıyı çoğaltma ve tekrar kullanılabilir şablon kaydetme; örneğin
       su içme, mola ve günlük kontrol şablonları ilk kullanımda isteğe bağlı sunulur.
 - [ ] Uygulama içinde yeni hatırlatıcı ve aramaya odaklanma kısayolları;
       formun klavyeyle tamamlanması ve kısayolların görünür yardım metni.
+
+**Durum: ilk iki madde tamamlandı (6 Ekim 2026, kaynak kod).** Başlık araması
+Türkçe büyük/küçük harfleri koruyarak durum, tekrar türü ve etiket filtreleriyle
+birlikte çalışır. Etiketsiz kayıtlar ayrıca seçilir; filtreler tek düğmeyle
+temizlenir. Her hatırlatıcıya virgülle ayrılmış en fazla 8 adet, her biri 24
+karakterlik etiket eklenir; aynı etiketin tekrarları kaldırılır. Etiketler
+düzenlemede, yeniden açılmada ve taşınabilir JSON yedeklerinde korunur.
+Yalnızca etiket düzenlemek sıradaki zamanı ve bekleyen bildirimleri korur.
+Yerel kayıt biçimi 7 ve taşınabilir biçim 1 korunur; `tags` isteğe bağlıdır,
+eski kayıtlar etiketsiz açılır. Cihaz takvimine etiket gönderilmez.
+
+154 uygulama testi; gerçek Masa API'si ve HTTP cihaz simülatörüyle arama,
+birlikte filtreleme, etiket ekleme/düzenleme, hatalı etiket, yedek geri yükleme,
+yeniden açılma ve 1180/390 piksel arayüz kontrolleri geçti. Etiketlerin
+cihaz devri/geri devrinde korunması ve 24 hatırlatıcı sınırı otomatik testlerde,
+etiket/kayıt/yedek akışı native txiki.js çekirdeğinde doğrulandı. Firmware
+derlemesi, OLED/düğme ve bağımsız firmware C++ kontrolleri de geçti.
 
 **Tamamlanma ölçütü:** arama ve filtreleme birlikte çalışır; çoğaltma yeni kimlik
 oluşturur ve eski geçmişi kopyalamaz. Eski kayıtlar etiketsiz olarak açılır,

@@ -17,7 +17,7 @@ ile kısa bir melodi çalar. Her hatırlatıcı için sessiz bildirim de seçile
 Masaüstü uygulaması [tinyjsapp](https://github.com/tarwin/tinyjsapp), cihazın Wi-Fi
 kurulumu [AyresWiFiManager](https://registry.platformio.org/libraries/ayresnet/AyresWiFiManager)
 kullanır. Takvim ve veriler bilgisayarında saklanır; ayrı bir sunucu veya bulut
-hesabı gerekmez. **Masa 0.8.1 / firmware 0.8.0** ile takvimi cihaza aktarıp
+hesabı gerekmez. **Masa 0.8.1 / firmware 0.8.1** ile takvimi cihaza aktarıp
 bilgisayar kapalıyken de hatırlatmasını sağlayabilirsin.
 
 ![Masa ajandası: günlük, haftalık ve aylık örnek hatırlatıcılar](docs/images/masa-agenda.jpg)
@@ -33,12 +33,14 @@ bağlantı durumu temsilidir; kişisel veriler içermez.*
 | --- | --- |
 | Masa / firmware **0.7.0** | Her gün, Her saat, Her 2 saatte; cron kuralları ve sonraki üç zamanın önizlemesi. |
 | Masa / firmware **0.8.0** | Sürekli açık ekran, ayarlanabilir boşta kapanma ve hatırlatmadan önce/sonra uyanma aralıkları; varsayılan **10/10 dakika**. |
-| Masa **0.8.1** | Uygulamaya özel yeni ikon ve yeniden derlenmiş macOS Apple Silicon paketi; firmware **0.8.0** ile kullanılır. |
+| Masa **0.8.1** | Yeni ikon, başlık araması, durum/tekrar/etiket filtreleri ve kullanıcı etiketleri; son kaynaklarla derlenmiş macOS Apple Silicon paketi. |
+| Firmware **0.8.1** | Sabit büyük saat/tarih; sıradaki not BOOT ile 10 saniyelik önizleme. Otomatik bilgi döngüsü ve geri sayım kaldırıldı. |
 
-6 Ekim 2026 itibarıyla **138 uygulama testi**, firmware kontrolleri ve macOS
-paketinin sürüm/ikon/imza doğrulaması geçti. Gerçek USB kartta 0.8.0 yüklemesi,
+6 Ekim 2026 itibarıyla **154 uygulama testi**, firmware kontrolleri ve macOS
+paketinin sürüm/ikon/imza doğrulaması geçti. Gerçek USB kartta 0.8.1 yüklemesi,
 NTP, ekran ayarlarının yeniden başlatmada korunması ve mevcut takvimin korunması
-doğrulandı. OLED, buzzer, düğmeler ve gerçek güç kesintisi için kullanıcı testleri
+doğrulandı; saatin fiziksel OLED’e sığdığı kullanıcı tarafından onaylandı.
+Türkçe bildirim, buzzer, düğmeler ve gerçek güç kesintisi için kullanıcı testleri
 [roadmap'te](docs/roadmap.md#fiziksel-testler-ve-paket-kontrolleri) takip edilir.
 İkonun kaynak dosyası ve üretim istemi [tasarım notunda](docs/app-icon.md) bulunur.
 
@@ -69,7 +71,7 @@ doğrulandı. OLED, buzzer, düğmeler ve gerçek güç kesintisi için kullanı
 - Bilgisayarda kalıcı gönderim kuyruğu ve bağlantı kesilince yeniden deneme.
 - Cihazda kalıcı kuyruk ve aynı bildirimin yeniden gönderilmesini ayırt etme.
 - Küçük OLED’de uzun notları sayfalama; BOOT’a kısa basarak bildirimi kapatma.
-- Boşta saat, sıradaki not ve kalan süre; BOOT ile uyanma.
+- Boşta sabit büyük saat/tarih; BOOT ile sıradaki notu kısa süreli gösterme (firmware 0.8.1+).
 - Ayarlardan **ekranı sürekli açık tutma**, boşta kapanma süresi ve hatırlatmadan
   önce/sonra açık kalma aralıkları (firmware 0.8.0+).
 - Donanım olmadan denemek için yerel cihaz simülatörü.
@@ -163,6 +165,11 @@ modunda sıradaki hatırlatma zamanı Masa açıkken cihaza aktarılır; bağım
 modda cihaz kendi takvimini kullanır. Zamanlı uyanma için cihazın güvenilir
 saati gerekir; sürekli açık seçeneği saat eşitlenmeden de çalışır.
 
+Firmware **0.8.1+** boşta sabit büyük saat ve tarih gösterir. Otomatik sayfa
+geçişi ve geri sayım yoktur. BOOT'a kısa basınca sıradaki notun tarih/saati ve
+başlık önizlemesi 10 saniye görünür, sonra saate döner. Bilgisayar modunda
+yalnızca sıradaki zaman aktarılır; bağımsız modda notun başlığı da görünür.
+
 Bu bölüm için firmware **0.8.0+** gerekir. Eski firmware diğer özelliklerle
 çalışmaya devam eder; ekran ayarlarının aktarılmadığı açıkça gösterilir.
 
@@ -221,6 +228,7 @@ yayımlanmış paketler değildir.
 | `dist/Masa — Hatırlatıcı.app` | Yeni ikonlu Masa 0.8.1; macOS Apple Silicon üzerinde aç. |
 | `dist/Masa-0.8.1-macOS-arm64.zip` | Aynı uygulamanın taşınabilir ZIP paketi. |
 | `dist/Masa-firmware-0.8.0-ESP32C3.bin` | Mevcut kart/bölüm düzeninde `0x10000` adresine yazılan uygulama görüntüsü. |
+| `dist/Masa-firmware-0.8.1-ESP32C3.bin` | Sakin OLED güncellemesi; USB yüklemesi, yazma hash'i, NTP ve mevcut kayıtların korunması doğrulandı. |
 | `dist/SHA256SUMS.txt` | ZIP ve firmware dosyasının bütünlük kontrolü. |
 | `dist/TEST-NOTLARI.txt` | Sürekli açık ve kısa uyanma/kapanma denemesi. |
 
@@ -245,8 +253,9 @@ Birden fazla seri cihaz varsa yükleme komutuna `--upload-port <PORT>` ekle.
 bağlantısı kurulunca BOOT’u bırak. USB CDC firmware’de açıktır.
 
 Hedef ekran SSD1306’dır: SDA **GPIO5**, SCL **GPIO6**, adres **0x3C**.
-Görünür alan 72×40 pikseldir; firmware 128×64 tamponda `(30,12)` ofset kullanır.
-Kart varyantlarında pinleri ve ofsetleri `firmware/include/config.h` ile ayarla.
+Görünür alan 72×40 pikseldir; firmware doğrudan SSD1306 72×40 sürücüsünü kullanır.
+Kart varyantlarında pinleri `firmware/include/config.h` ile ayarla; farklı panel
+boyutu varsa ekran sürücüsünün de değiştirilmesi gerekir.
 
 ### 3. Cihazı Wi-Fi’ye bağla
 
@@ -320,6 +329,13 @@ masaüstü zamanlayıcısını veya cihaz bağlantısını çalıştırmaz.
 
 ## Kullanım ve sınırlar
 
+- **Ajandam** ve **Bugün** görünümlerinde başlıkta ara; durum, tekrar türü ve
+  etiket filtrelerini birlikte kullan. **Filtreleri temizle** tüm seçimleri
+  sıfırlar. **Etiketsiz**, eski ve etiketi olmayan notları gösterir.
+- Hatırlatıcı formundaki **Etiketler** alanına `İş, Kişisel, Rutin` gibi kendi
+  etiketlerini virgülle ayırarak yaz. En fazla 8 etiket, her birinde 24 karakter
+  kabul edilir. Etiketler yeniden açılmada ve JSON yedeğinde korunur;
+  yalnızca etiket değiştirmek bekleyen bildirimleri ve sıradaki zamanı korur.
 - Tek seferlik hatırlatma için **Tek seferlik**, tarih ve saat seç. Gelecekte bir
   zaman gerekir. **30 dakika sonra** kısayolu tarih ve saati doldurur. Zamanı
   geldiğinde kayıt pasifleşir; cihaz çevrimdışıysa teslimat yine 24 saat denenir.
@@ -377,8 +393,9 @@ masaüstü zamanlayıcısını veya cihaz bağlantısını çalıştırmaz.
 - OLED’de **ç, ğ, ı, İ, ö, ş, ü** ve büyük harfleri korunur. UTF-8 metinler
   karakter sınırlarında, 12 karakter × 3 satırlık sayfalara bölünür. Yazı tipinde
   bulunmayan karakterler `?` olarak gösterilir.
-- Bildirim yokken OLED saat, sıradaki not ve kalan süreyi 5 saniyede bir
-  değiştirir. 60 saniyede kısılır, 120 saniyede kapanır. BOOT veya yeni bildirim
+- Firmware 0.8.1'de bildirim yokken OLED büyük saat ve tarihi sabit gösterir;
+  BOOT'a kısa basınca sıradaki not 10 saniyelik sabit önizlemede görünür.
+  Varsayılan boşta süreleriyle 60 saniyede kısılır, 120 saniyede kapanır. BOOT veya yeni bildirim
   ekranı uyandırır; boşta uyanma tamamlandı işlemi oluşturmaz.
 - BOOT’a kısa basmak mevcut bildirimi kapatır. **Bilgisayar açıldığında başlat**
   ayarı paketlenmiş uygulamada kullanılabilir; macOS onay isterse Giriş Öğeleri’ni kontrol et.

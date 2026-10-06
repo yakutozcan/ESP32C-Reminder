@@ -11,18 +11,21 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 clib = root / "firmware/.pio/libdeps/esp32-c3-oled/U8g2/src/clib"
 header = (root / "firmware/include/oled_text.h").read_text()
-font = re.search(r"#define MASA_OLED_FONT (\w+)", header).group(1)
+fonts = re.findall(r"#define MASA_OLED(?:_CLOCK)?_FONT (\w+)", header)
 source = (clib / "u8g2_fonts.c").read_text(encoding="latin-1")
-start = source.index("const uint8_t " + font + "[")
-end = source.index(";\n", start) + 2
 
 with tempfile.TemporaryDirectory(prefix="masa-oled-test-") as directory:
     build = Path(directory)
-    # Only compile the selected font, preserving its upstream copyright comment.
-    selected = source[source.rfind("/*", 0, start):end]
+    # Compile only the two display fonts, preserving their upstream notices.
+    selected = ""
+    for font in fonts:
+        start = source.index("const uint8_t " + font + "[")
+        end = source.index(";\n", start) + 2
+        selected += source[source.rfind("/*", 0, start):end] + "\n"
     (build / "font.c").write_text('#include "u8g2.h"\n' + selected)
     objects = []
-    for path in (clib / "u8g2_font.c", clib / "u8g2_intersection.c", build / "font.c"):
+    for path in (clib / "u8g2_font.c", clib / "u8g2_intersection.c", clib / "u8x8_d_ssd1306_72x40.c",
+                 clib / "u8x8_display.c", clib / "u8x8_cad.c", clib / "u8x8_gpio.c", build / "font.c"):
         target = build / (path.stem + ".o")
         subprocess.run(["cc", "-O2", "-ffunction-sections", "-fdata-sections", "-I", str(clib), "-c", str(path), "-o", str(target)], check=True)
         objects.append(str(target))

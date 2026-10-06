@@ -62,7 +62,10 @@ int main() {
   assert(nextAfter(r,firstRepeatedMillis)==at(2026,11,2,1,30));
   r.kind=Recurrence::Interval;r.workStart=60;r.workEnd=4*60;r.intervalMinutes=60;r.weekdays=127;
   auto first=at(2026,3,8,1);assert(nextAfter(r,first)==at(2026,3,8,3));assert(nextAfter(r,at(2026,3,8,3))==at(2026,3,9,1));
-  IdleState idle;idle.wake(100);assert(idle.page(100)==0);assert(idle.page(5100)==1);assert(idle.page(20100)==0);assert(idle.contrast(60099)==180);assert(idle.contrast(60100)==40);assert(idle.contrast(120100)==0);idle.wake(120100);assert(idle.contrast(120101)==180);
+  IdleState idle;idle.wake(100);assert(!idle.showDetails(100));assert(!idle.showDetails(5100));assert(!idle.showDetails(20100));assert(idle.contrast(60099)==180);assert(idle.contrast(60100)==40);assert(idle.contrast(120100)==0);idle.wake(120100);assert(idle.contrast(120101)==180);
+  idle.inspect(200000);assert(idle.showDetails(200000));assert(idle.showDetails(209999));assert(!idle.showDetails(210000));assert(!idle.showDetails(220000));
+  idle.inspect(300000);idle.wake(300001);assert(!idle.showDetails(300001)); // Real notifications cancel the manual glance.
+  idle.inspect(UINT32_MAX-10);assert(idle.showDetails(10));assert(!idle.showDetails(10000));assert(!idle.showDetails(UINT32_MAX-10)); // Expired previews never revive after rollover.
   idle.wake(UINT32_MAX-10);assert(idle.contrast(10)==180); // Millis rollover remains awake.
   FakeFS fs;fs.files["state"]="old";fs.files["wifi"]="credentials";const uint8_t bytes[]={ 'n','e','w' };
   fs.failOpen=true;assert(!writeSnapshot(fs,"state","tmp",bytes,3));assert(fs.files["state"]=="old");fs.failOpen=false;

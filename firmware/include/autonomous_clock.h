@@ -94,8 +94,14 @@ inline int64_t latestDue(const Recurrence& r,int64_t first,int64_t now) {
 inline bool quietAt(int minute, bool enabled, int start, int end) { return enabled && (start<end ? minute>=start && minute<end : minute>=start || minute<end); }
 struct IdleState {
   uint32_t awakeSince=0;
-  void wake(uint32_t now) {awakeSince=now;}
-  unsigned page(uint32_t now) const {return ((now-awakeSince)/5000)%4;}
+  uint32_t detailsSince=0;
+  bool detailsRequested=false;
+  void wake(uint32_t now) {awakeSince=now;detailsRequested=false;}
+  void inspect(uint32_t now) {wake(now);detailsSince=now;detailsRequested=true;}
+  bool showDetails(uint32_t now) {
+    if(detailsRequested&&uint32_t(now-detailsSince)>=10000)detailsRequested=false;
+    return detailsRequested;
+  }
   unsigned contrast(uint32_t now) const {const auto elapsed=now-awakeSince;return elapsed>=120000?0:elapsed>=60000?40:180;}
 };
 }

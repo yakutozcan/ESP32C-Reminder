@@ -2,8 +2,13 @@
 #include <stddef.h>
 #include <stdint.h>
 #define MASA_OLED_FONT u8g2_font_6x12_te
+#define MASA_OLED_CLOCK_FONT u8g2_font_logisoso18_tn
 
 namespace masa {
+constexpr unsigned OLED_WIDTH = 72;
+constexpr unsigned OLED_HEIGHT = 40;
+constexpr unsigned OLED_CLOCK_BASELINE = 25;
+constexpr unsigned OLED_DATE_BASELINE = 37;
 constexpr size_t OLED_COLUMNS = 12;
 constexpr size_t OLED_ROWS = 3;
 constexpr size_t OLED_PAGE_CHARACTERS = OLED_COLUMNS * OLED_ROWS;
