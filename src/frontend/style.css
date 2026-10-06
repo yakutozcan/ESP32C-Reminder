@@ -87,6 +87,12 @@ legend { font-size: 14px; margin-bottom: var(--space-xs); }
 .device-result { font-size: 14px; overflow-wrap: anywhere; }
 .check-label { display: flex; flex-direction: row; align-items: center; gap: var(--space-xs); margin-bottom: 4px; min-height: 44px; }
 .check-label input { width: 18px; height: 18px; min-height: 18px; accent-color: var(--color-accent); }
+.settings-section { border-top: 1px solid var(--color-rule); padding-top: var(--space-lg); margin-top: var(--space-lg); }
+.settings-section h3 { font-size: 17px; font-weight: 600; margin: 0 0 var(--space-sm); }
+.settings-section .form-note { color: var(--color-muted); margin: var(--space-xs) 0 var(--space-md); }
+.import-titles { max-height: 180px; overflow-y: auto; padding-left: 22px; margin: 0 0 var(--space-lg); font-size: 14px; overflow-wrap: anywhere; }
+#import-form .check-label { align-items: flex-start; margin-bottom: var(--space-xs); }
+#import-form .check-label input { margin-top: 3px; flex-shrink: 0; }
 .toast { position: fixed; bottom: var(--space-lg); right: var(--space-lg); max-width: calc(100% - 32px); display: flex; align-items: center; gap: var(--space-sm); background: var(--color-ink); color: var(--color-paper); padding: var(--space-sm) var(--space-md); border-radius: 5px; z-index: 500; font-size: 14px; }
 .toast button { background: var(--color-ink); color: var(--color-paper); border-color: var(--color-muted); padding: 4px 8px; }
 [hidden] { display: none !important; }
@@ -98,7 +104,7 @@ legend { font-size: 14px; margin-bottom: var(--space-xs); }
   main { padding: var(--space-lg) var(--space-md); } .page-header { align-items: flex-start; flex-direction: column; } .intro { margin-top: var(--space-xl); } .intro p { font-size: 14px; }
   .week-strip { gap: 2px; padding-bottom: var(--space-lg); } .week-day { padding: 8px 2px; min-height: 88px; } .week-day small { font-size: 10px; } .week-day span { font-size: 12px; }
   .list-heading { flex-direction: column; gap: var(--space-xs); } .filters { gap: 4px; } .filters button { min-height: 44px; padding: 4px 9px; }
-  .reminder-row { grid-template-columns: 60px minmax(0, 1fr); gap: 8px; } .row-actions { flex-wrap: wrap; } .row-actions button { font-size: 12px; }
+  .reminder-row { grid-template-columns: 68px minmax(0, 1fr); gap: 8px; } .row-actions { flex-wrap: wrap; } .row-actions button { font-size: 12px; }
   dialog { padding: var(--space-lg); } .dialog-heading h2 { font-size: 27px; } .dialog-actions button { font-size: 14px; } .toast { right: 16px; bottom: 16px; flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

@@ -1,11 +1,13 @@
 import { ReminderEngine, newState } from './core/engine.js';
-import { requestDevice } from './core/device.js';
+import { requestDevice, readDeviceEvents } from './core/device.js';
 
 let engine;
 let ready;
 let appHandle;
 let busy = false;
 let lastError = '';
+let lastEventSync = 0;
+let actionError = '';
 let connection = { status: 'unknown', checkedAt: null };
 async function getEngine() {
   if (!ready) throw new Error('Uygulama başlatılıyor; bir saniye sonra tekrar dene.');
@@ -18,8 +20,16 @@ async function snapshot() {
 }
 export const api = {
   snapshot,
+  async exportBackup() { return (await getEngine()).exportBackup(); },
+  async previewImport(input) { return (await getEngine()).previewImport(input); },
+  async importBackup(input) { await (await getEngine()).importBackup(input); return snapshot(); },
+  async saveSettings(input) { await (await getEngine()).saveSettings(input); return snapshot(); },
+  async setAutonomous(input) { await (await getEngine()).setAutonomous(input); return snapshot(); },
+  async syncSchedule() { await (await getEngine()).syncSchedule(); return snapshot(); },
   async saveReminder(input) { await (await getEngine()).saveReminder(input); return snapshot(); },
   async removeReminder({ id }) { await (await getEngine()).removeReminder(id); return snapshot(); },
+  async snoozeJob({ id, minutes }) { await (await getEngine()).snoozeJob(id, minutes); return snapshot(); },
+  async completeJob({ id }) { await (await getEngine()).completeJob(id); return snapshot(); },
   async saveDevice(input) { await (await getEngine()).setDevice(input); connection = { status: 'unknown', checkedAt: null }; return snapshot(); },
   async checkDevice() {
     const e = await getEngine();
@@ -34,7 +44,7 @@ export const api = {
   },
   async testDevice() {
     const result = await (await getEngine()).testDevice();
-    connection = { status: 'online', checkedAt: Date.now() };
+    connection = { ...connection, protocol: result.protocol, status: 'online', checkedAt: Date.now() };
     return result;
   },
   async launchAtLogin({ enabled }) {
@@ -47,8 +57,13 @@ async function cycle() {
   if (busy) return;
   busy = true;
   try {
+    if (Date.now() - lastEventSync >= 5000) {
+      lastEventSync = Date.now();
+      try { await (await getEngine()).syncDevice(); actionError = ''; }
+      catch (error) { actionError = 'Cihaz eşitlemesi: ' + error.message; }
+    }
     await (await getEngine()).tick();
-    lastError = '';
+    lastError = actionError;
     await appHandle.push('state', await snapshot());
   } catch (error) {
     lastError = error.message;
@@ -63,10 +78,17 @@ export function init(app) {
     engine = new ReminderEngine({ state: saved ?? newState(),
       persist: state => app.store.set('reminder-state', state),
       send: (device, job) => requestDevice(device, '/api/notify', job),
-      notify: title => app.notify({ title: 'Masa', body: title }) });
-    if (saved?.version === 1) {
-      if (await app.store.get('reminder-state-v1-backup') == null &&
-          await app.store.set('reminder-state-v1-backup', saved) === false)
+      readEvents: readDeviceEvents,
+      health: device => requestDevice(device, '/api/health'),
+      readSchedule: device => requestDevice(device, '/api/schedule'),
+      writeSchedule: (device, payload) => requestDevice(device, '/api/schedule', payload),
+      backup: state => app.store.set('reminder-import-backup', { createdAt: Date.now(), state }),
+      ackEvents: (device, ids) => requestDevice(device, '/api/events/ack', { ids }),
+      notify: (title, quiet) => app.notify({ title: 'Masa', body: title, sound: !quiet }) });
+    if (saved && saved.version !== engine.state.version) {
+      const backupKey = 'reminder-state-v' + saved.version + '-backup';
+      if (await app.store.get(backupKey) == null &&
+          await app.store.set(backupKey, saved) === false)
         throw new Error('Eski hatırlatıcıların yedeği kaydedilemedi.');
       await engine.commit(engine.snapshot());
     }

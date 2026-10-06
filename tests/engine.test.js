@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ReminderEngine, migrateState } from '../src/core/engine.js';
+import { ReminderEngine, migrateState, newState } from '../src/core/engine.js';
+import { DAY } from '../src/core/schedule.js';
 const input = { title: 'Mola ver', frequency: 'daily', time: '09:00', melody: 'chime' };
 function fixture(overrides = {}) {
   let now = new Date('2026-10-05T08:00:00').getTime();
@@ -88,7 +89,7 @@ test('v1 migration preserves schedules, device key and queued IDs without mutati
   const before = JSON.stringify(legacy);
   const f = fixture({ state: legacy });
   const migrated = f.engine.snapshot();
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 5);
   assert.deepEqual(migrated.device, legacy.device);
   assert.equal(migrated.reminders[0].nextDue, legacy.reminders[0].nextDue);
   assert.equal(migrated.reminders[0].melody, 'chime');
@@ -104,4 +105,135 @@ test('test notification always requests the short melody', async () => {
   const f = fixture(); await f.engine.testDevice();
   assert.equal(f.received[0].melody, 'chime');
   assert.equal('vibrationMs' in f.received[0], false);
+});
+
+test('one-off sends once, stops its schedule and remains stopped after restart', async () => {
+  const f = fixture();
+  await f.engine.saveReminder({ ...input, frequency: 'once', onceDate: '2026-10-05' });
+  f.advance(new Date('2026-10-05T09:00:00').getTime());
+  await f.engine.tick();
+  assert.equal(f.received.length, 1);
+  assert.equal(f.engine.state.reminders[0].enabled, false);
+  assert.equal(f.engine.state.reminders[0].nextDue, null);
+  const replay = fixture({ state: f.saved() }); replay.advance(f.now() + DAY);
+  await replay.engine.tick();
+  assert.equal(replay.received.length, 0);
+  assert.equal(replay.engine.state.jobs.length, 1);
+});
+
+test('one-off catches up within 24 hours but skips stale occurrences', async () => {
+  for (const [delay, count] of [[3600000, 1], [DAY, 0]]) {
+    const f = fixture();
+    await f.engine.saveReminder({ ...input, frequency: 'once', onceDate: '2026-10-05' });
+    f.advance(new Date('2026-10-05T09:00:00').getTime() + delay);
+    await f.engine.tick(); await f.engine.tick();
+    assert.equal(f.received.length, count);
+    assert.equal(f.engine.state.reminders[0].nextDue, null);
+    assert.equal(f.engine.state.reminders[0].enabled, false);
+  }
+});
+
+test('past enabled one-offs are rejected; expired entries can be rescheduled', async () => {
+  const f = fixture();
+  await assert.rejects(f.engine.saveReminder({ ...input, frequency: 'once', onceDate: '2026-10-04' }), /gelecekte/);
+  const r = await f.engine.saveReminder({ ...input, frequency: 'once', onceDate: '2026-10-05' });
+  f.advance(r.nextDue); await f.engine.tick();
+  await f.engine.saveReminder({ ...f.engine.state.reminders[0], onceDate: '2026-10-06', enabled: true });
+  f.advance(new Date('2026-10-06T09:00:00').getTime()); await f.engine.tick();
+  assert.equal(f.received.length, 2);
+});
+
+test('snooze survives restart, preserves the repeat schedule and does not send early', async () => {
+  const f = fixture();
+  await f.engine.saveReminder({ ...input, melody: 'none' });
+  f.advance(new Date('2026-10-05T09:00:00').getTime()); await f.engine.tick();
+  const nextDue = f.engine.state.reminders[0].nextDue;
+  const original = f.engine.state.jobs[0];
+  await f.engine.snoozeJob(original.id, 15);
+  const saved = f.saved(); const snoozed = saved.jobs[1];
+  assert.equal(saved.jobs[0].outcome, 'snoozed');
+  assert.equal(saved.jobs[0].status, 'delivered');
+  assert.notEqual(snoozed.id, original.id);
+  assert.equal(snoozed.due, f.now() + 15 * 60000);
+  assert.equal(saved.reminders[0].nextDue, nextDue);
+  assert.equal(f.notices.length, 1);
+  const replay = fixture({ state: saved });
+  await replay.engine.setDevice({ url: 'http://127.0.0.1:8787', token: 'local-simulator-token-12345678' });
+  replay.advance(snoozed.due - 1); await replay.engine.tick();
+  assert.equal(replay.received.length, 0); assert.equal(replay.notices.length, 0);
+  replay.advance(snoozed.due); await Promise.all([replay.engine.tick(), replay.engine.tick()]);
+  assert.deepEqual(replay.received, [{ id: snoozed.id, title: input.title, melody: 'none' }]);
+  assert.deepEqual(replay.notices, [input.title]);
+  assert.equal(replay.engine.state.reminders[0].nextDue, nextDue);
+});
+
+test('snoozed one-offs can be snoozed again without reactivating their schedule', async () => {
+  const f = fixture();
+  await f.engine.saveReminder({ ...input, frequency: 'once', onceDate: '2026-10-05' });
+  f.advance(new Date('2026-10-05T09:00:00').getTime()); await f.engine.tick();
+  await f.engine.snoozeJob(f.engine.state.jobs[0].id, 5);
+  f.advance(f.now() + 5 * 60000); await f.engine.tick();
+  await f.engine.snoozeJob(f.engine.state.jobs[1].id, 30);
+  f.advance(f.now() + 30 * 60000); await f.engine.tick();
+  assert.equal(f.received.length, 3); assert.equal(f.notices.length, 3);
+  assert.equal(f.engine.state.reminders[0].nextDue, null);
+  assert.equal(f.engine.state.reminders[0].enabled, false);
+});
+
+test('offline snooze replaces desktop pending delivery and retries with its new stable ID', async () => {
+  const f = fixture({ send: async () => { throw new Error('offline'); } });
+  await f.engine.saveReminder(input);
+  f.advance(new Date('2026-10-05T09:00:00').getTime()); await f.engine.tick();
+  await f.engine.snoozeJob(f.engine.state.jobs[0].id, 5);
+  f.advance(f.now() + 5 * 60000); await f.engine.tick();
+  const snoozed = f.engine.state.jobs[1];
+  assert.equal(snoozed.attempts, 1); assert.equal(f.notices.length, 2);
+  f.engine.send = async (_, job) => f.received.push(job);
+  f.advance(snoozed.retryAt); await f.engine.tick();
+  assert.equal(f.received[0].id, snoozed.id); assert.equal(f.notices.length, 2);
+  assert.equal(f.engine.state.jobs[0].attempts, 1);
+});
+
+test('failed snooze persistence leaves original delivery and schedule unchanged', async () => {
+  const f = fixture(); await f.engine.saveReminder(input);
+  f.advance(new Date('2026-10-05T09:00:00').getTime()); await f.engine.tick();
+  const before = f.engine.snapshot(); f.engine.persist = async () => false;
+  await assert.rejects(f.engine.snoozeJob(before.jobs[0].id, 15), /diske/);
+  assert.deepEqual(f.engine.snapshot(), before);
+});
+
+test('future, duplicate, expired and deleted reminder snoozes are rejected', async () => {
+  const f = fixture(); await f.engine.saveReminder(input);
+  f.advance(new Date('2026-10-05T09:00:00').getTime()); await f.engine.tick();
+  const original = f.engine.state.jobs[0].id;
+  await assert.rejects(f.engine.snoozeJob(original, 10), /5, 15/);
+  await assert.rejects(f.engine.snoozeJob('missing', 5), /ertelenemiyor/);
+  await f.engine.snoozeJob(original, 5);
+  await assert.rejects(f.engine.snoozeJob(original, 5), /ertelenemiyor/);
+  await assert.rejects(f.engine.snoozeJob(f.engine.state.jobs[1].id, 5), /zamanı gelmiş/);
+  await f.engine.removeReminder(f.engine.state.reminders[0].id);
+  assert.equal(f.engine.state.jobs[1].status, 'cancelled');
+  const expired = fixture(); await expired.engine.saveReminder(input);
+  expired.advance(new Date('2026-10-05T09:00:00').getTime()); await expired.engine.tick();
+  expired.advance(expired.now() + DAY);
+  await assert.rejects(expired.engine.snoozeJob(expired.engine.state.jobs[0].id, 5), /24 saatte/);
+});
+
+test('snooze notification is not emitted or sent when its due-time save fails', async () => {
+  const f = fixture(); await f.engine.saveReminder(input);
+  f.advance(new Date('2026-10-05T09:00:00').getTime()); await f.engine.tick();
+  await f.engine.snoozeJob(f.engine.state.jobs[0].id, 5);
+  f.advance(f.now() + 5 * 60000); f.engine.persist = async () => false;
+  await assert.rejects(f.engine.tick(), /diske/);
+  assert.equal(f.notices.length, 1); assert.equal(f.received.length, 1);
+  assert.equal(f.engine.state.jobs[1].desktopPending, true);
+});
+
+test('v2 migration adds user outcomes and leaves its backup intact', () => {
+  const legacy = { version: 2, reminders: [{ ...input, id: 'old', enabled: true, nextDue: 1791176400000 }],
+    jobs: [{ id: 'old:stable', status: 'queued', melody: 'none', due: 100, retryAt: 101, attempts: 3 }],
+    device: { url: 'http://device', token: 'kept-private' } };
+  const before = JSON.stringify(legacy);
+  assert.deepEqual(migrateState(legacy), { ...newState(), ...legacy, version: 5, deviceEvents: [], jobs: legacy.jobs.map(j => ({ ...j, rootId: j.id, outcome: 'pending' })) });
+  assert.equal(JSON.stringify(legacy), before);
 });

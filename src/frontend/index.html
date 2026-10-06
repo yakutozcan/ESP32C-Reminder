@@ -17,7 +17,9 @@
       <nav aria-label="Ajanda">
         <button class="nav-item active" data-view="all" aria-current="page"><span>Ajandam</span><span id="nav-count">0</span></button>
         <button class="nav-item" data-view="today">Bugün</button>
+        <button class="nav-item" data-view="completed">Yapılanlar</button>
         <button class="nav-item" data-view="history">Bildirim geçmişi</button>
+        <button class="nav-item" id="open-preferences">Ayarlar ve yedekler</button>
       </nav>
       <div class="sidebar-bottom">
         <button class="device-link" id="open-device"><span class="status-dot"></span><span><strong>ESP32-C3 OLED</strong><small id="sidebar-status">Bağlantı ayarlanmadı</small></span><span aria-hidden="true">↗</span></button>
@@ -31,7 +33,7 @@
       <section class="agenda" aria-labelledby="list-heading">
         <div class="list-heading"><h2 id="list-heading">Hatırlatıcılar</h2><p id="summary">Yükleniyor…</p></div>
         <div id="filters" class="filters" aria-label="Tekrar sıklığı">
-          <button data-filter="all" aria-pressed="true">Tümü</button><button data-filter="daily" aria-pressed="false">Günlük</button><button data-filter="weekly" aria-pressed="false">Haftalık</button><button data-filter="monthly" aria-pressed="false">Aylık</button>
+          <button data-filter="all" aria-pressed="true">Tümü</button><button data-filter="once" aria-pressed="false">Tek seferlik</button><button data-filter="daily" aria-pressed="false">Günlük</button><button data-filter="weekly" aria-pressed="false">Haftalık</button><button data-filter="monthly" aria-pressed="false">Aylık</button><button data-filter="interval" aria-pressed="false">Aralıklı</button>
         </div>
         <div id="reminders" aria-busy="true"><p class="loading">Hatırlatıcılar yükleniyor…</p></div>
       </section>
@@ -44,13 +46,26 @@
       <p>Yapılacak işi ve tekrarını seç.</p>
       <input type="hidden" name="id">
       <label>Ne hatırlatalım?<input name="title" required maxlength="80" placeholder="Örneğin, bitkileri sula" autocomplete="off"></label>
-      <div class="form-row"><label>Tekrar<select name="frequency"><option value="daily">Her gün</option><option value="weekly">Her hafta</option><option value="monthly">Her ay</option></select></label><label>Saat<input type="time" name="time" required value="09:00"></label></div>
+      <div class="form-row"><label>Tekrar<select name="frequency"><option value="once">Tek seferlik</option><option value="daily" selected>Her gün</option><option value="weekly">Haftalık</option><option value="monthly">Her ay</option><option value="interval">Belirli aralıklarla</option></select></label><label id="time-field">Saat<input type="time" name="time" required value="09:00"></label></div>
+      <div id="weekly-options" hidden><label>Kaç haftada bir?<select name="weekInterval"><option value="1">Her hafta</option><option value="2">İki haftada bir</option></select></label><label>Başlangıç haftası<input type="date" name="anchorDate"><small>Seçtiğin tarihin haftasından itibaren tekrar eder.</small></label></div>
+      <div id="interval-field" hidden><label>Kaç dakikada bir?<input type="number" name="intervalMinutes" min="1" max="10080" value="120"><small>120 dakika = 2 saat. Çalışma saatleri seçilirse her gün başlangıçtan itibaren tekrar eder.</small></label><label class="check-label"><input type="checkbox" name="workHours"> Yalnızca belirlediğim saatlerde</label><div class="form-row" id="work-hours-field" hidden><label>Başlangıç<input type="time" name="workStart" value="09:00"></label><label>Bitiş<input type="time" name="workEnd" value="18:00"><small>Aynı gün içinde, bitiş hariç.</small></label></div></div>
+      <div id="once-field" hidden><label>Tarih<input name="onceDate" type="date" disabled></label><div class="device-actions"><button type="button" id="quick-reminder">30 dakika sonra</button></div></div>
       <fieldset id="weekday-field" hidden><legend>Hangi günler?</legend><div class="weekday-picker"><label><input type="checkbox" value="1">Pzt</label><label><input type="checkbox" value="2">Sal</label><label><input type="checkbox" value="3">Çar</label><label><input type="checkbox" value="4">Per</label><label><input type="checkbox" value="5">Cum</label><label><input type="checkbox" value="6">Cmt</label><label><input type="checkbox" value="0">Paz</label></div></fieldset>
       <label id="monthday-field" hidden>Ayın günü<input name="monthDay" type="number" min="1" max="31" value="1"><small>Seçtiğin gün o ayda yoksa ayın son günü hatırlatılır.</small></label>
       <label>Bildirim sesi<select name="melody"><option value="chime" selected>Kısa melodi · yaklaşık 1 saniye</option><option value="none">Sessiz · yalnızca ekran</option></select></label>
       <p class="form-note">Bilgisayarın yerel saatine göre. Pencere kapansa da Masa çalışmaya devam eder.</p>
       <p class="form-error" id="reminder-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="close-dialog">Vazgeç</button><button class="primary" type="submit">Hatırlatıcıyı kaydet</button></div>
+    </form>
+  </dialog>
+  <dialog id="snooze-dialog" aria-labelledby="snooze-heading">
+    <form id="snooze-form" aria-describedby="snooze-error">
+      <div class="dialog-heading"><h2 id="snooze-heading">Biraz sonra hatırlat.</h2><button type="button" class="icon-button close-dialog" aria-label="Pencereyi kapat">×</button></div>
+      <p id="snooze-title"></p>
+      <label>Ne kadar sonra?<select name="minutes"><option value="5">5 dakika</option><option value="15" selected>15 dakika</option><option value="30">30 dakika</option></select></label>
+      <p class="form-note" id="snooze-note">Tekrar takvimi değişmez. Bilgisayar açık ve Masa çalışıyor olmalı. Yapıldı olarak işaretlersen bekleyen ertelemeler iptal edilir.</p>
+      <p class="form-error" id="snooze-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="close-dialog">Vazgeç</button><button class="primary" type="submit">Ertele</button></div>
     </form>
   </dialog>
   <dialog id="device-dialog" aria-labelledby="device-heading">
@@ -62,9 +77,22 @@
       <p class="device-result" id="device-result" role="status">Bağlantı henüz kontrol edilmedi.</p>
       <div class="device-actions"><button type="button" id="check-device">Bağlantıyı kontrol et</button><button type="button" id="test-device">Test bildirimi</button></div>
       <label class="check-label"><input id="login-toggle" type="checkbox"> Bilgisayar açıldığında başlat</label><small id="login-help">Paketlenmiş uygulamada desteklenir.</small>
+      <section class="settings-section" aria-labelledby="autonomous-heading"><h3 id="autonomous-heading">Bilgisayardan bağımsız çalışma</h3><label class="check-label"><input id="autonomous-toggle" type="checkbox"> Takvimi cihazda çalıştır</label><p class="form-note">Cihaz açık kaldığı sürece bilgisayar uyurken de hatırlatır. En fazla 24 hatırlatıcı aktarılır. Boşta ekran saat ve sıradaki notu gösterir.</p><p id="schedule-result" class="device-result" role="status"></p><p id="takeover-note" class="form-note" hidden>Devredersen cihazdaki diğer bilgisayarın takviminin yerine bu ajanda geçer.</p><div class="device-actions"><button id="sync-schedule" type="button">Takvimi şimdi aktar</button><button id="takeover-schedule" type="button" hidden>Bu bilgisayara devret</button></div></section>
       <p class="form-error" id="device-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="close-dialog">Kapat</button><button class="primary" type="submit">Bağlantıyı kaydet</button></div>
     </form>
+  </dialog>
+  <dialog id="preferences-dialog" aria-labelledby="preferences-heading">
+    <div class="dialog-heading"><h2 id="preferences-heading">Sana göre ayarla.</h2><button type="button" class="icon-button close-dialog" aria-label="Pencereyi kapat">×</button></div>
+    <form id="preferences-form" aria-describedby="preferences-error">
+      <section class="settings-section" aria-labelledby="quiet-heading"><h3 id="quiet-heading">Sessiz saatler</h3><label class="check-label"><input type="checkbox" name="quietEnabled"> Bu saatlerde ses çalma</label><div class="form-row"><label>Başlangıç<input name="quietStart" type="time" value="22:00" required></label><label>Bitiş<input name="quietEnd" type="time" value="08:00" required></label></div><p class="form-note">Ekrandaki notlar görünmeye devam eder. Gece yarısını geçen aralıklar da desteklenir.</p></section>
+      <p id="preferences-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="primary" type="submit">Ayarları kaydet</button></div>
+    </form>
+    <section class="settings-section" aria-labelledby="backup-heading"><h3 id="backup-heading">Yedekleme ve taşıma</h3><p class="form-note">Hatırlatıcılar ve sessiz saatler kaydedilir. Cihaz adresi, anahtarı ve bildirim geçmişi yedeğe eklenmez.</p><div class="device-actions"><button id="export-backup" type="button">Yedeği indir</button></div><label>Yedekten geri yükle<input id="backup-file" type="file" accept=".json,application/json"><small>JSON dosyası · en fazla 1 MB</small></label><p id="backup-error" class="form-error" role="alert"></p></section>
+    <div class="dialog-actions"><button type="button" class="close-dialog">Kapat</button></div>
+  </dialog>
+  <dialog id="import-dialog" aria-labelledby="import-heading">
+    <form id="import-form" aria-describedby="import-error"><div class="dialog-heading"><h2 id="import-heading">Yedeği incele.</h2><button type="button" class="icon-button close-dialog" aria-label="Pencereyi kapat">×</button></div><p id="import-summary"></p><ul id="import-titles" class="import-titles"></ul><fieldset><legend>Nasıl geri yükleyelim?</legend><label class="check-label"><input type="radio" name="mode" value="merge" checked> Ajandama ekle; aynı notları güncelle</label><label class="check-label"><input type="radio" name="mode" value="replace"> Mevcut ajandanın yerine koy</label></fieldset><p class="form-note" id="import-note">Mevcut notlar korunur. Sessiz saatler yedekten alınır.</p><p id="import-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="close-dialog">Vazgeç</button><button class="primary" type="submit">Geri yükle</button></div></form>
   </dialog>
   <div class="toast" id="toast" role="status" hidden><span></span><button hidden>Geri al</button><button class="dismiss-toast" aria-label="Mesajı kapat">×</button></div>
 </body>

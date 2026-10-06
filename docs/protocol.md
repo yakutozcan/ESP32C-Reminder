@@ -1,121 +1,244 @@
-# Local notification protocol · version 2
+# Local reminder protocol · version 4
 
-Desktop → device over the same LAN. The firmware listens on TCP port 80.
-Notification endpoints require `Authorization: Bearer <DEVICE_TOKEN>`.
-AyresWiFiManager owns the passwordless captive portal only in setup mode.
-No cloud, MQTT broker or desktop inbound port is required.
-HTTP is unencrypted; this protocol is for a trusted local network.
+Masa 0.6.0 and firmware 0.6.0 communicate on the same LAN, on TCP port 80.
+All `/api/` endpoints require `Authorization: Bearer <DEVICE_TOKEN>`.
+The passwordless captive portal is available only in setup mode, where Ayres
+owns port 80 and the reminder endpoints are unavailable. No cloud or incoming
+desktop port is required. HTTP and device storage are unencrypted; keep the key
+private and use a trusted network.
 
-## Health
+Desktop delivery supports protocol 2, 3 and 4. Device actions need protocol 3+;
+autonomous scheduling needs protocol 4. Upgrade the desktop before the firmware.
+Protocol 1 produces an explicit upgrade message.
+
+## Health and delivery
 
 `GET /api/health`
 
 ```json
-{"protocol":2,"name":"Masa ESP32-C3","firmware":"0.2.3","pending":0,"ip":"192.168.1.50","rssi":-50}
+{"protocol":4,"name":"Masa ESP32-C3","firmware":"0.6.0","pending":0,"eventsPending":0,"autonomous":true,"timeValid":true,"ownerId":"desktop-uuid","revision":7,"scheduleMaxTimestamp":2145916800000,"ip":"192.168.1.50","rssi":-50}
 ```
 
-`pending` includes the currently displayed notification. A health response is
-not evidence of the OLED or buzzer functioning.
+`pending` includes the displayed notice (maximum 8). `eventsPending` counts
+unacknowledged actions (maximum 16). Health does not prove that the physical
+OLED or buzzer works. `scheduleMaxTimestamp` reflects the firmware's `time_t`
+range; the desktop checks transferred timestamps before handing over ownership.
 
-## Notification
-
-`POST /api/notify`, `Content-Type: application/json`
+`POST /api/notify`, JSON body up to 1024 bytes:
 
 ```json
 {"id":"reminder-uuid:1791176400000","title":"Bitkileri sula","melody":"chime"}
 ```
 
-The desktop generates a stable ID from the reminder ID and occurrence timestamp.
-Retries keep the same ID. Test notifications have fresh `test-` IDs.
-
-Limits: non-empty ID ≤160 bytes, title ≤320 UTF-8 bytes, `melody` must be `"chime"` or `"none"`, body ≤1024 bytes. The desktop additionally enforces one-line titles
-of 1–80 Unicode code points. Both software versions must agree on protocol `2`.
-
 ```json
-{"protocol":2,"id":"reminder-uuid:1791176400000","accepted":true,"duplicate":false}
+{"protocol":4,"id":"reminder-uuid:1791176400000","accepted":true,"duplicate":false}
 ```
 
-The device commits to NVS **before** replying 200. Its pending queue holds 8
-notifications. IDs in that queue and the last 32 completed IDs are deduplicated
-across restarts. Receipt means queued, not completed by the user. A reboot while
-displaying a notice may show it again. Resetting NVS or evicting old IDs removes
-their deduplication guarantee.
+ID: 1–160 UTF-8 bytes. Title: 1–320 UTF-8 bytes; the desktop also enforces
+1–80 Unicode code points on one line. Melody: `chime` or `none`.
+Recurring and one-off IDs are `<reminderId>:<dueMilliseconds>`; snoozes have
+fresh `snooze-` IDs retained across retries. Test IDs begin with `test-`.
+While the device owns scheduling, ordinary desktop notifications return 409;
+explicit test notifications remain supported.
 
-| HTTP | Meaning | Desktop behavior |
-| --- | --- | --- |
-| 200 | Accepted or already accepted | Mark delivered if protocol, ID and accepted match |
-| 400 | Invalid body/fields | Keep queued, retry until expiry; inspect configuration |
-| 401 | Invalid token | Show key mismatch; retry after settings correction |
-| 413 | Oversized body | Reject; valid desktop payloads fit |
-| 429 | Queue full | Retry with the same ID |
-| 503 | Wi-Fi setup active or corrupt NVS queue | Complete Wi-Fi setup or inspect device storage |
-| 507 | Persistence failed | Retry; the device has not accepted the notice |
+The queue, last 32 dismissed IDs, action receipts and autonomous history
+provide bounded deduplication across restarts. Acceptance means durably queued,
+not completed. A reboot can redisplay an accepted notice. Resetting storage or
+pruning old receipts ends their deduplication guarantee.
 
-The desktop waits at most 5 seconds per attempt. Retry delays are 10, 20, 40,
-80, 160 and then 300 seconds. A pending notice expires 24 hours after its
-scheduled occurrence. Desktop edits, pauses and deletes cancel only notices
-still in the desktop queue. Already accepted device notices are not recalled.
+| HTTP | Meaning |
+| --- | --- |
+| 200 | Valid acceptance or an idempotent repeat |
+| 400 | Invalid fields or schedule capacity |
+| 401 | Bearer key mismatch |
+| 409 | Scheduler ownership, revision or deferred reconciliation conflict |
+| 413 | Oversized request |
+| 429 | Notification queue full |
+| 503 | Setup mode or unreadable persistent storage |
+| 507 | Persistence failed; mutation rolled back |
 
-Queue processing is serialized with desktop edits and storage writes, so no
-network send races with a pause/delete. If the desktop crashes after acceptance
-but before saving its acknowledgement, retrying the same ID is safe within the
-device’s deduplication window.
+The desktop times out after five seconds. Delivery retries use 10, 20, 40,
+80, 160 and then 300 seconds; a queued occurrence expires after 24 hours.
+Missed recurrences collapse to the latest valid occurrence within that window.
+Desktop scheduling persists a job before sending it. Retries retain its ID.
+Quiet hours are evaluated when sending, including retries, without changing the
+stored melody preference. Native desktop notifications also silence their sound.
 
-## Upgrade and setup
+## Autonomous schedule
 
-Protocol 2 replaces `vibrationMs` with `melody`. `chime` plays a fixed four-note,
-approximately 0.9-second PWM melody; `none` leaves the buzzer silent. Protocol 1
-responses produce an explicit firmware-upgrade message in the desktop. New firmware
-rejects old notification payloads; existing NVS queue entries are read without
-erasing them, mapping zero vibration to silence and positive durations to chime.
-The desktop migrates state version 1 to 2 after storing a copy in
-`reminder-state-v1-backup`; occurrence IDs and scheduling timestamps stay unchanged.
+`POST /api/schedule`, JSON body up to 32768 bytes:
 
-Firmware 0.2.2 uses **AyresWiFiManager 2.3.0** for provisioning, scanning, DNS
-and Wi-Fi connectivity. When unconfigured, the initial connection attempt fails,
-or after a 5-second BOOT hold, the device exposes an open `Masa-XXXX` access point.
-The OLED and USB output show its name and `http://192.168.4.1`.
-Ayres owns port 80 in setup mode; the notification server stops before opening
-the portal and starts on normal Wi-Fi. Notification APIs are unavailable in setup.
-The device key stays in NVS and appears on the Turkish setup page and USB `INFO`.
-BOOT remains controlled by Masa; holding it opens setup without deleting credentials.
+```json
+{
+  "ownerId":"desktop-uuid","revision":7,"enabled":true,
+  "takeover":false,"timezone":"STD-3","utcNow":1791262800000,
+  "quietHours":{"quietEnabled":true,"quietStart":"22:00","quietEnd":"08:00"},
+  "reminders":[{
+    "id":"water","title":"Su iç","frequency":"interval","time":"09:00",
+    "intervalMinutes":60,"anchorAt":1791262800000,
+    "workStart":"09:00","workEnd":"18:00","weekdays":[1,2,3,4,5],
+    "monthDay":1,"melody":"chime","enabled":true,"nextDue":1791266400000
+  }],
+  "deferred":[],"completedRoots":[],"cancelledIds":[]
+}
+```
 
-The Turkish page is installed into LittleFS `/masa/` by the firmware and served
-by Ayres. `GET /scan` (alias `/scan.json`) returns an array of
-`{"ssid":"Home","rssi":-45,"secure":true,"encryption":1}` or HTTP 202 with
-`{"scanning":true}`. A driver failure returns HTTP 503 with
-`{"error":"scan_failed"}`; a successful scan with no networks returns `[]`.
-Errors and empty results are different UI states. The page
-scans on load, deduplicates SSIDs by strongest signal, and allows hidden SSIDs.
-A scan may block the portal briefly; the independent buzzer task still stops PWM
-on time. Results are cached for 20 seconds by Ayres. USB `SCAN` tests the same
-HTTP handler, rather than implementing another scanner.
-`POST /save` writes Wi-Fi settings to LittleFS `/wifi.json` and reboots. Setup
-requests do not require a device key; the notification API still does. The
-passwordless setup network does not remove a home network's password requirement.
+Limits: 24 reminder definitions, 24 deferred deliveries, 32 delivered journal
+entries; reminder and owner IDs up to 128 bytes. Both active and paused
+definitions count toward capacity. `completedRoots` and `cancelledIds` each
+contain at most 100 occurrence IDs. They recall device notices and deferred
+timers explicitly; an upload merges new deferred jobs with offline device
+timers rather than silently replacing them with an older desktop snapshot.
+Changed, paused or removed definitions recall their pending notices/timers.
+Accepted notices cannot be recalled through the legacy protocol 2/3 interface.
 
-The first transition copies legacy NVS Wi-Fi credentials (or compile-time defaults)
-only if Ayres has no credential file and no import marker. Successful import leaves
-the original NVS record intact for rollback, and persists `ayresimported` in NVS.
-Subsequent boots preserve Ayres settings; deleted settings are not resurrected from
-the old backup. Pending/recent notification IDs and the device key are unchanged.
-LittleFS auto-formats on first mount failure, as required by Ayres. Normal firmware
-uploads do not upload a filesystem image; do not use `uploadfs` to upgrade this app.
+Recurrence fields:
 
-The pinned dependencies need two build-local compatibility fixes, implemented in
-`firmware/scripts/ayres_compat.py`: initialize Arduino 2.0.17's IDF scan configuration,
-and let Arduino manage Ayres' scan lifecycle and result records. This avoids a race
-between a direct IDF scan and Arduino's event handler consuming the same records.
-Ayres' scan JSON capacity is increased and reconnection accepts open Wi-Fi networks.
-The build uses patched copies; installed dependencies are never edited. Unexpected
-upstream changes fail the build and must be reviewed before updating version pins.
-HTTP, local filesystem and NVS contents are unencrypted; keep the device key private.
+| Frequency | Fields and meaning |
+| --- | --- |
+| `once` | `onceDate` (`YYYY-MM-DD`), local `time`, `scheduledAt` milliseconds |
+| `daily` | Local `time` |
+| `weekly` | `weekdays` (Sunday 0), `weekInterval` 1 or 2, `anchorDate` anchoring Monday weeks |
+| `monthly` | `monthDay` 1–31, clamped to the last day of each month |
+| `interval` | `intervalMinutes` 1–10080, fixed `anchorAt`, allowed `weekdays`; optional paired `workStart`/`workEnd` |
 
-## OLED text
+Without a work window, intervals use an elapsed-time grid from their anchor.
+With a window, each allowed local day starts a new grid at `workStart`, and
+`workEnd` is exclusive. Calendar days and weeks follow local wall time across
+DST; global intervals retain elapsed-time spacing. Daily and monthly weekdays
+are unused. `nextDue: null` means no future occurrence.
 
-Firmware 0.2.3 retains original UTF-8 notification titles in NVS. The 6×12
-Latin Extended font includes `ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü`; rendering uses `drawUTF8`.
-Rows contain 12 Unicode characters and pages contain 36, regardless of byte length.
-Unsupported glyphs are replaced with `?` only during rendering. Older queue entries
-remain readable; already transliterated titles cannot recover their lost accents.
-USB `TEST` displays all twelve Turkish glyphs. `INFO` reports font coverage.
+`timezone` is a POSIX TZ rule (Istanbul: `STD-3`), derived from the desktop's
+Date offsets. Stable annual DST `M` rules are supported; irregular political or
+lunar rules are rejected. Desktop timezone changes recalculate future schedule
+cursors before upload. Deferred timers retain their absolute due timestamps.
+Quiet windows may cross midnight; their start is inclusive and end exclusive.
+
+`GET /api/schedule` and successful POST replies return:
+
+```json
+{
+  "protocol":4,"ownerId":"desktop-uuid","revision":7,"enabled":true,
+  "timeValid":true,"timezone":"STD-3",
+  "quietHours":{"quietEnabled":true,"quietStart":"22:00","quietEnd":"08:00"},
+  "cursors":[{"id":"water","nextDue":1791266400000}],
+  "history":[],"deferred":[],"accepted":true
+}
+```
+
+Only POST replies include `accepted`. Journal/deferred jobs contain `id`,
+`rootId`, `reminderId`, `title`, original `melody`, `due`, `expiresAt`, delivery
+`status` and user `outcome`. History is `delivered`; deferred jobs are `queued`.
+Optional `completedAt` and `snoozedTo` describe actions. A timer moving into
+history retains its ID and root. History and deferred IDs do not overlap.
+
+A different active owner needs explicit `takeover:true`. A lower revision from
+the current owner is rejected. Repeating a revision with the same immutable
+configuration refreshes time and returns live progress without resetting it;
+changed configuration at that revision is rejected. `utcNow`, `takeover`,
+`nextDue` and moving deferred entries are excluded from revision equality.
+Unchanged definitions preserve device cursors across newer revisions, including
+handback. Command lists are frozen on the desktop for each upload revision.
+
+The desktop persists device ownership **before** enabling it remotely. Failed
+or lost responses keep desktop generation and delivery stopped. Disabling
+persists the desired setting while retaining that fence, sends `enabled:false`,
+then durably imports live cursors/history/timers before resuming desktop work.
+A failed handback can be retried with “Takvimi eşitle.” Switching the device
+address is blocked until that handback is confirmed.
+
+Time is deliberately untrusted at every device boot. Neither saved UTC nor
+build time enables scheduling. Fresh authenticated desktop UTC or an SNTP
+callback establishes trust. The device can then schedule without the desktop
+and during network outages; another power loss requires fresh synchronization.
+The OLED shows waiting for time and health reports `timeValid:false` until then.
+
+## Device actions
+
+`GET /api/events` returns up to 16 actions in creation order:
+
+```json
+{"protocol":4,"events":[{"id":"0123456789abcdef0123456789abcdef","notificationId":"water:1791262800000","action":"snoozed","minutes":15}]}
+```
+
+Event IDs are persistent 32-character lowercase hex strings. Actions are
+`completed` or `snoozed` (15 minutes). Autonomous events also include a full
+`job` snapshot; snoozes include the new `deferred` job, whose timer starts on
+the device immediately. Legacy desktop-owned actions have no autonomous job
+snapshot, so their snooze starts when the desktop receives the event.
+
+`POST /api/events/ack`, body up to 2048 bytes:
+
+```json
+{"ids":["0123456789abcdef0123456789abcdef"]}
+```
+
+```json
+{"protocol":4,"acknowledged":["0123456789abcdef0123456789abcdef"]}
+```
+
+Reading does not remove events. Repeated ACKs succeed. The desktop validates
+whole batches, durably merges effects and retains its last 64 processed IDs
+before ACK. Failed desktop writes leave device events intact; failed device
+writes restore queue/events/schedule together. A full event queue never evicts
+an unacknowledged action and leaves the notice available with an OLED warning.
+Completing an occurrence cancels its snooze family, preserving future repeats.
+Unknown legacy/test IDs are acknowledged without creating reminders.
+
+BOOT: 40 ms debounce, 350 ms second-press window. Single press dismisses;
+double press completes; releasing a 1–5 second hold snoozes; five seconds opens
+setup and suppresses both actions. A gesture pins the displayed notice.
+Timeout/dismiss do not mark completion. Idle BOOT wakes the screen. These
+behaviors have host tests; physical board verification remains pending.
+
+## Storage, migration and rollback
+
+Firmware 0.6.0 atomically renames `/masa-state.tmp` to `/masa-state.json` in
+LittleFS, storing pending/recent/events/schedule together before acknowledging
+a mutation. An interrupted or failed write preserves the previous snapshot.
+`/wifi.json` and the original NVS queue/key remain separate and intact. First
+migration reads the old NVS queue, preserving IDs and events, then commits the
+new snapshot. Corrupt state fails closed. Only a completely erased filesystem
+partition is formatted automatically; a damaged existing partition is preserved.
+Normal updates must not use `uploadfs`.
+
+The retained NVS queue is a **pre-migration backup**, not a current mirror.
+Before downgrade: disable autonomous scheduling, synchronize/drain actions,
+retain backups, and account for stale NVS notices replaying. An old firmware
+cannot consume the new LittleFS schedule; rollback is not seamless.
+
+Desktop state version 5 adds quiet preferences and persisted scheduler ownership
+while preserving older schedules, IDs, snooze families and receipts. Original
+v1–4 states are backed up under `reminder-state-v<version>-backup` before startup
+migration. v1 vibration settings become chime/silence; v3's legacy snoozed status
+becomes an outcome separate from delivery status. Returning to an older desktop
+requires confirmed device handback, quitting the app and restoring the matching
+state backup. Later changes do not appear in that backup.
+
+Portable `masa-reminders` JSON version 1 exports definitions/preferences only,
+excluding keys, Wi-Fi, runtime jobs and ownership. Import validates the full
+file and combined capacity before writing. Existing data is saved under
+`reminder-import-backup` as `{createdAt,state}` before a changed import; failures
+preserve current state. Merge replaces matching IDs without duplicates and keeps
+other definitions; replace removes other definitions. An identical import is
+read-only. Historical raw desktop state v1–5 can be imported as definitions.
+
+## OLED, simulator and provisioning
+
+Active notices take priority over idle clock/date, next title, countdown and
+connection/clock state, rotating every five seconds. Idle contrast dims at
+60 seconds and turns off at 120 seconds; BOOT or a new notice wakes it. The
+72×40 OLED displays 12 characters × 3 rows in a Latin Extended 6×12 font with
+Turkish glyphs. Paging uses code points; original UTF-8 titles stay in storage.
+
+`npm run simulator` implements protocol 4 on localhost. Terminal controls:
+`done <id>`, `snooze <id>`, `close <id>`. CLI state is volatile; tests inject
+snapshots, persistent writes and a clock for restart/failure scenarios. The
+simulator resolves POSIX rules through matching IANA rules in Node; firmware
+uses its C library directly. It does not prove physical device operation.
+
+AyresWiFiManager 2.3.0 handles the open `Masa-XXXX` setup AP, scanning and
+`POST /save` credentials. Legacy NVS Wi-Fi is imported once only if no existing
+file/import marker exists; original NVS remains for recovery. Pinned compatibility
+patches are applied to build-local dependency copies. See the hardware guide for
+wiring and physical verification.

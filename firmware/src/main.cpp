@@ -10,12 +10,17 @@
 #include <AyresWiFiManager.h>
 #include <LittleFS.h>
 #include <HTTPClient.h>
+#include <time.h>
+#include <sys/time.h>
+#include <esp_sntp.h>
+#include <esp_partition.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <deque>
 #include "setup_page.h"
 #include "oled_text.h"
+#include "button_gesture.h"
 #if __has_include("config.h")
 #include "config.h"
 #else
@@ -40,8 +45,11 @@ AyresWiFiManager wifiManager(8, ACK_BUTTON_PIN);
 bool apiStarted = false;
 Preferences preferences;
 struct Notice { String id; String title; bool chime; };
+struct DeviceEvent { String id; String notificationId; String action; uint8_t minutes; String job; String deferred; };
 std::deque<Notice> queue;
 std::deque<String> recent;
+std::deque<DeviceEvent> events;
+constexpr size_t EVENT_LIMIT = 16;
 constexpr size_t QUEUE_LIMIT = 8;
 constexpr size_t RECENT_LIMIT = 32;
 bool active = false;
@@ -51,9 +59,10 @@ bool storageReady = false;
 bool queueHealthy = true;
 bool oledPresent = false;
 uint32_t activeSince = 0, lastDraw = 0, lastConnected = 0;
-int lastButton = HIGH;
-uint32_t buttonChanged = 0;
-bool pressed = false;
+masa::ButtonGesture buttonGesture;
+String buttonNoticeId;
+String actionFeedback;
+uint32_t feedbackSince = 0;
 constexpr uint8_t BUZZER_CHANNEL = 0;
 QueueHandle_t soundCommands = nullptr;
 bool setupMode = false;
@@ -122,9 +131,12 @@ bool readMelody(JsonObject obj, bool& chime, bool allowLegacy = false) {
   return false;
 }
 
+#include "autonomous_state.h"
+#include "atomic_snapshot.h"
+
 bool saveQueue() {
   if (!storageReady) return false;
-  DynamicJsonDocument doc(16384);
+  DynamicJsonDocument doc(98304);
   JsonArray pending = doc["pending"].to<JsonArray>();
   for (const auto& notice : queue) {
     JsonObject obj = pending.createNestedObject();
@@ -132,15 +144,30 @@ bool saveQueue() {
   }
   JsonArray seen = doc["recent"].to<JsonArray>();
   for (const auto& id : recent) seen.add(id);
+  JsonArray actions = doc["events"].to<JsonArray>();
+  for (const auto& event : events) {
+    JsonObject obj = actions.createNestedObject();
+    obj["id"] = event.id; obj["notificationId"] = event.notificationId; obj["action"] = event.action;
+    if (event.action == "snoozed") obj["minutes"] = event.minutes;
+    if (event.job.length()) { DynamicJsonDocument snapshot(1536); deserializeJson(snapshot,event.job); obj["job"].set(snapshot); }
+    if (event.deferred.length()) { DynamicJsonDocument snapshot(1536); deserializeJson(snapshot,event.deferred); obj["deferred"].set(snapshot); }
+  }
+  doc["format"] = 4;
+  stateJson(doc.createNestedObject("schedule"),autonomous,true);
   if (doc.overflowed()) return false;
   String data;
   serializeJson(doc, data);
-  return preferences.putString("queue", data) == data.length();
+  if (!filesystemReady) return false;
+  // NVS original remains intact for rollback; Wi-Fi lives in another file.
+  return masa::writeSnapshot(LittleFS,"/masa-state.json","/masa-state.tmp",reinterpret_cast<const uint8_t*>(data.c_str()),data.length());
 }
 bool loadQueue() {
-  const String data = preferences.getString("queue", "");
-  if (!data.length()) return true;
-  DynamicJsonDocument doc(16384);
+  String data;
+  const bool migrated=filesystemReady && LittleFS.exists("/masa-state.json");
+  if(migrated) {File file=LittleFS.open("/masa-state.json","r");if(!file || file.size()>98304)return false;data=file.readString();file.close();}
+  else data=preferences.getString("queue", "");
+  if (!data.length()) return !migrated;
+  DynamicJsonDocument doc(98304);
   if (deserializeJson(doc, data)) return false;
   if (!doc["pending"].is<JsonArray>() || !doc["recent"].is<JsonArray>()) return false;
   for (JsonObject obj : doc["pending"].as<JsonArray>()) {
@@ -153,11 +180,31 @@ bool loadQueue() {
     if (!id.is<String>() || recent.size() >= RECENT_LIMIT) return false;
     recent.push_back(id.as<String>());
   }
+  // Existing protocol-2 queues do not have events. Keep pending and recent IDs intact.
+  if (doc.containsKey("events")) {
+    if (!doc["events"].is<JsonArray>()) return false;
+    for (JsonObject obj : doc["events"].as<JsonArray>()) {
+      const String action = obj["action"].as<String>();
+      if (!obj["id"].is<String>() || obj["id"].as<String>().length() != 32 ||
+          !obj["notificationId"].is<String>() || !obj["notificationId"].as<String>().length() ||
+          obj["notificationId"].as<String>().length() > 160 ||
+          (action != "completed" && action != "snoozed") ||
+          (action == "snoozed" && obj["minutes"].as<int>() != 15) || events.size() >= EVENT_LIMIT) return false;
+      String job,deferred;
+      if(obj["job"].is<JsonObject>()){AutonomousJob snapshot;if(!parseJob(obj["job"],snapshot))return false;job=jobSnapshot(snapshot);}
+      if(obj["deferred"].is<JsonObject>()){AutonomousJob snapshot;if(!parseJob(obj["deferred"],snapshot))return false;deferred=jobSnapshot(snapshot);}
+      events.push_back({obj["id"].as<String>(), obj["notificationId"].as<String>(), action, uint8_t(action == "snoozed" ? 15 : 0),job,deferred});
+    }
+  }
+  if(migrated) {
+    if(doc["format"].as<int>()!=4 || !parseState(doc["schedule"],autonomous,true))return false;
+    setenv("TZ",autonomous.timezone.c_str(),1);tzset();
+  }
   return true;
 }
 void reply(int code, const char* message) {
   DynamicJsonDocument doc(256);
-  doc["protocol"] = 2; doc["error"] = message;
+  doc["protocol"] = 4; doc["error"] = message;
   String body; serializeJson(doc, body);
   server.send(code, "application/json", body);
 }
@@ -172,7 +219,10 @@ void health() {
   if (!authorize()) return;
   if (!queueHealthy) { reply(503, "Persistent queue is corrupt; inspect serial monitor"); return; }
   DynamicJsonDocument doc(1024);
-  doc["protocol"] = 2; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.2.3";
+  doc["protocol"] = 4; doc["name"] = "Masa ESP32-C3"; doc["firmware"] = "0.6.0";
+  doc["autonomous"]=autonomous.enabled;doc["timeValid"]=clockTrusted.load();doc["ownerId"]=autonomous.ownerId;doc["revision"]=autonomous.revision;
+  doc["scheduleMaxTimestamp"]=int64_t(sizeof(time_t)>=8?4102444800000LL:2145916800000LL);
+  doc["eventsPending"] = events.size();
   doc["sound"] = soundCommands ? "passive-buzzer" : "unavailable";
   doc["oledI2c"] = oledPresent;
   doc["pending"] = queue.size(); doc["ip"] = WiFi.localIP().toString(); doc["rssi"] = WiFi.RSSI();
@@ -193,17 +243,60 @@ void notify() {
   if (!id.length() || id.length() > 160 || !title.length() || title.length() > 320) {
     reply(400, "Invalid notification bounds"); return;
   }
+  if(autonomous.enabled && !id.startsWith("test-") && !id.startsWith("usb-test-")) {reply(409,"Device owns scheduling");return;}
   bool duplicate = false;
   for (const auto& old : recent) if (old == id) duplicate = true;
   for (const auto& old : queue) if (old.id == id) duplicate = true;
+  for (const auto& event : events) if (event.notificationId == id) duplicate = true;
   if (!duplicate) {
     if (queue.size() >= QUEUE_LIMIT) { reply(429, "Queue full"); return; }
     queue.push_back({id, title, chime});
     if (!saveQueue()) { queue.pop_back(); reply(507, "Queue could not be persisted"); return; }
   }
   DynamicJsonDocument ack(512);
-  ack["protocol"] = 2; ack["id"] = id; ack["accepted"] = true; ack["duplicate"] = duplicate;
+  ack["protocol"] = 4; ack["id"] = id; ack["accepted"] = true; ack["duplicate"] = duplicate;
   String response; serializeJson(ack, response); server.send(200, "application/json", response);
+}
+void listEvents() {
+  if (!authorize()) return;
+  if (!queueHealthy) { reply(503, "Persistent queue is corrupt"); return; }
+  DynamicJsonDocument doc(49152);
+  doc["protocol"] = 4;
+  JsonArray actions = doc["events"].to<JsonArray>();
+  for (const auto& event : events) {
+    JsonObject obj = actions.createNestedObject();
+    obj["id"] = event.id; obj["notificationId"] = event.notificationId; obj["action"] = event.action;
+    if (event.action == "snoozed") obj["minutes"] = event.minutes;
+    if (event.job.length()) { DynamicJsonDocument snapshot(1536); deserializeJson(snapshot,event.job); obj["job"].set(snapshot); }
+    if (event.deferred.length()) { DynamicJsonDocument snapshot(1536); deserializeJson(snapshot,event.deferred); obj["deferred"].set(snapshot); }
+  }
+  if (doc.overflowed()) { reply(507, "Events could not be serialized"); return; }
+  String body; serializeJson(doc, body); server.send(200, "application/json", body);
+}
+void acknowledgeEvents() {
+  if (!authorize()) return;
+  if (!queueHealthy) { reply(503, "Persistent queue is corrupt"); return; }
+  const String body = server.arg("plain");
+  if (body.length() > 2048) { reply(413, "Payload too large"); return; }
+  DynamicJsonDocument doc(4096);
+  if (deserializeJson(doc, body) || !doc["ids"].is<JsonArray>() || doc["ids"].size() > EVENT_LIMIT) {
+    reply(400, "Invalid event acknowledgement"); return;
+  }
+  for (JsonVariant id : doc["ids"].as<JsonArray>()) {
+    if (!id.is<String>() || id.as<String>().length() != 32) { reply(400, "Invalid event ID"); return; }
+  }
+  const auto oldEvents = events;
+  for (JsonVariant id : doc["ids"].as<JsonArray>()) {
+    for (auto it = events.begin(); it != events.end();) {
+      if (it->id == id.as<String>()) it = events.erase(it); else ++it;
+    }
+  }
+  if (events.size() != oldEvents.size() && !saveQueue()) {
+    events = oldEvents; reply(507, "Event acknowledgement could not be persisted"); return;
+  }
+  // Repeated acknowledgements also succeed after a lost HTTP response.
+  doc["protocol"] = 4; doc["acknowledged"] = doc["ids"]; doc.remove("ids");
+  String response; serializeJson(doc, response); server.send(200, "application/json", response);
 }
 void drawLines(const String& text, size_t page) {
   oled.clearBuffer();
@@ -234,7 +327,8 @@ String randomKey() {
   return String(key);
 }
 void printStatus() {
-  Serial.println("Masa firmware 0.2.3 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
+  Serial.println("Masa firmware 0.6.0 | ESP32-C3 | passive buzzer GPIO " + String(BUZZER_PIN));
+  Serial.println("Pending button events: " + String(events.size()));
   Serial.println("Sound task: " + String(soundCommands ? "ready" : "unavailable"));
   Serial.println("OLED I2C: " + String(oledPresent ? "detected at 0x3C" : "not detected"));
   oled.setFont(MASA_OLED_FONT);
@@ -254,6 +348,7 @@ void printStatus() {
   Serial.println("Device key: " + deviceToken);
 }
 void startSetup() {
+  if (!filesystemReady) {Serial.println("Filesystem recovery required; preserving partition");return;}
   if (wifiManager.isPortalActive()) return;
   if (mdnsStarted) { MDNS.end(); mdnsStarted = false; }
   if (apiStarted) { server.stop(); apiStarted = false; }
@@ -283,7 +378,7 @@ bool writePortalFile(const char* path, const String& contents) {
 
 void preparePortalStorage() {
   // NVS notices and device key use another partition and remain unchanged.
-  if (!LittleFS.begin(true)) { Serial.println("Portal storage unavailable"); return; }
+  if (!filesystemReady) { Serial.println("Portal storage unavailable"); return; }
   // Import once, never overwrite credentials later saved by Ayres. Keep the NVS
   // original for rollback; the marker prevents resurrecting Wi-Fi after an erase.
   if (!LittleFS.exists("/wifi.json") && !preferences.getBool("ayresimported", false)) {
@@ -336,21 +431,38 @@ void handleSerial() {
     }
   }
 }
-void finishNotice() {
+#include "autonomous_runtime.h"
+
+void finishNotice(const char* action = nullptr) {
   if (queue.empty()) return;
   setSound(false);
+  if (action && events.size() >= EVENT_LIMIT) {
+    actionFeedback = "İşlem deposuDolu.       Masa'yı aç."; feedbackSince = millis();
+    activeSince = millis(); lastDraw = 0; return;
+  }
   const auto oldQueue = queue;
   const auto oldRecent = recent;
+  const auto oldEvents = events;
+  const auto oldAutonomous=autonomous;
+  if (action && !recordAutonomousAction(action)) {
+    actionFeedback="İşlem için  Saat/depo   bekleniyor";feedbackSince=millis();lastDraw=0;return;
+  }
   recent.push_back(queue.front().id);
   if (recent.size() > RECENT_LIMIT) recent.pop_front();
   queue.pop_front();
   if (!saveQueue()) {
-    queue = oldQueue; recent = oldRecent;
+    queue = oldQueue; recent = oldRecent; events = oldEvents;autonomous=oldAutonomous;
     Serial.println("Queue save failed; keeping notification for retry");
+    actionFeedback = "KaydedilemediTekrar dene."; feedbackSince = millis();
+    lastDraw = 0;
     activeSince = millis(); // Bound storage retries to the display interval.
     return;
   }
   active = false; lastDraw = 0;
+  if (action) {
+    actionFeedback = String(action) == "completed" ? "Yapıldı.    Masa'ya     aktarılacak." : autonomous.enabled ? "15 dakika   ertelendi." : "15 dakika   ertele.     Masa'yı aç.";
+    feedbackSince = millis();
+  }
 }
 void setup() {
   pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW);
@@ -366,8 +478,26 @@ void setup() {
   oled.setI2CAddress(OLED_ADDRESS * 2); oled.begin(); oled.setContrast(180);
   Wire.beginTransmission(OLED_ADDRESS); oledPresent = Wire.endTransmission() == 0;
   storageReady = preferences.begin("masa", false);
-  queueHealthy = storageReady && loadQueue();
-  if (!queueHealthy) { queue.clear(); Serial.println("Persistent queue could not be read; refusing new notifications"); }
+  filesystemReady=LittleFS.begin(false);
+  if(!filesystemReady) {
+    // First boot may have a completely erased partition. Initialize only after
+    // checking every byte; a damaged existing filesystem is never auto-erased.
+    const esp_partition_t* partition=esp_partition_find_first(ESP_PARTITION_TYPE_DATA,ESP_PARTITION_SUBTYPE_ANY,"spiffs");
+    bool blank=partition!=nullptr;uint8_t bytes[256];
+    if(partition)for(size_t offset=0;blank&&offset<partition->size;offset+=sizeof(bytes)) {
+      size_t length=std::min(sizeof(bytes),size_t(partition->size-offset));
+      if(esp_partition_read(partition,offset,bytes,length)!=ESP_OK){blank=false;break;}
+      for(size_t i=0;i<length;++i)if(bytes[i]!=0xFF){blank=false;break;}
+    }
+    if(blank&&LittleFS.format())filesystemReady=LittleFS.begin(false);
+    if(!filesystemReady)Serial.println("Existing LittleFS unavailable; preserving partition for recovery");
+  }
+  queueHealthy = storageReady && filesystemReady && loadQueue();
+  if(queueHealthy && !LittleFS.exists("/masa-state.json")) queueHealthy=saveQueue();
+  if (!queueHealthy) { queue.clear(); recent.clear(); events.clear(); Serial.println("Persistent queue could not be read; refusing new notifications"); }
+  // Ayres begins with auto-format-on-failure. Do not invoke it while an existing
+  // filesystem is unreadable: preserve its bytes for recovery instead.
+  if (!filesystemReady) {drawLines("Depo hatası Kurtarma    gerekiyor",0);return;}
   WiFi.persistent(false); WiFi.setHostname(DEVICE_HOSTNAME); WiFi.setAutoReconnect(true);
   // Start the RF entropy source before generating persistent authentication keys.
   WiFi.mode(WIFI_STA);
@@ -392,18 +522,27 @@ void setup() {
   preparePortalStorage();
   wifiManager.begin();
   // Avoid run(): its BOOT hold erases Wi-Fi and its Internet time sync is not
-  // needed for desktop-scheduled reminders. Use the public connection API.
+  // used here: our own callback establishes trusted scheduler time. Use the public connection API.
   if (!wifiManager.connectToWiFi()) startSetup();
   const char* headers[] = {"Authorization"}; server.collectHeaders(headers, 1);
   server.on("/api/health", HTTP_GET, health);
   server.on("/api/notify", HTTP_POST, notify);
+  server.on("/api/events", HTTP_GET, listEvents);
+  server.on("/api/events/ack", HTTP_POST, acknowledgeEvents);
+  server.on("/api/schedule", HTTP_GET, getSchedule);
+  server.on("/api/schedule", HTTP_POST, putSchedule);
+  sntp_set_time_sync_notification_cb([](struct timeval*) {clockTrusted=true;});
+  configTime(0,0,"pool.ntp.org","time.google.com");
+  setenv("TZ",autonomous.timezone.c_str(),1);tzset();
   server.onNotFound([] { reply(404, "Not found"); });
   if (!setupMode) { server.begin(); apiStarted = true; }
   drawLines("Masa        Wi-Fi       bekleniyor", 0);
 }
 void loop() {
   const uint32_t now = millis();
+  if(!filesystemReady){handleSerial();delay(10);return;}
   handleSerial();
+  tickAutonomous();
   wifiManager.update();
   setupMode = wifiManager.isPortalActive();
   if (!setupMode) wifiManager.reintentarConexionSiNecesario();
@@ -421,31 +560,43 @@ void loop() {
     if (mdnsStarted) { MDNS.end(); mdnsStarted = false; }
     if (!hasConnected && now - lastConnected >= 60000) startSetup();
   }
-  if (!active && !queue.empty()) {
-    active = true; activeSince = now; lastDraw = 0;
-    setSound(queue.front().chime);
+  const bool wasBusy = buttonGesture.busy();
+  const auto buttonAction = buttonGesture.update(digitalRead(ACK_BUTTON_PIN) == LOW, now);
+  if (!wasBusy && buttonGesture.busy()) {
+    idleState.wake(now);oled.setPowerSave(0);oled.setContrast(180);lastDraw=0;
+    buttonNoticeId = active && !queue.empty() ? queue.front().id : "";
+    if (active) setSound(false);
   }
-  if (active) {
+  if (buttonAction == masa::ButtonAction::Setup) startSetup();
+  else if (buttonAction != masa::ButtonAction::None && active && !queue.empty() && buttonNoticeId == queue.front().id) {
+    if (buttonAction == masa::ButtonAction::Complete) finishNotice("completed");
+    else if (buttonAction == masa::ButtonAction::Snooze) finishNotice("snoozed");
+    else finishNotice();
+  }
+  const bool feedback = actionFeedback.length() && millis() - feedbackSince < 2500;
+  if (!feedback) actionFeedback = "";
+  if (!active && !queue.empty() && !buttonGesture.busy() && !feedback) {
+    active = true; activeSince = now; lastDraw = 0;idleState.wake(now);oled.setPowerSave(0);oled.setContrast(180);
+    setSound(queue.front().chime && noticeSoundAllowed());
+  }
+  if (feedback) {
+    if (!lastDraw || now - lastDraw >= 200) { drawLines(actionFeedback, 0); lastDraw = now; }
+  } else if (active) {
     const auto& notice = queue.front();
     const uint32_t elapsed = now - activeSince;
     const size_t pages = masa::pageCount(notice.title.c_str(), notice.title.length());
     if (!lastDraw || now - lastDraw >= 200) { drawLines(notice.title, (elapsed / 3500) % pages); lastDraw = now; }
-    if (elapsed >= max(uint32_t(10000), uint32_t(pages * 3500))) finishNotice();
+    if (elapsed >= max(uint32_t(10000), uint32_t(pages * 3500))) {
+      if (!buttonGesture.busy() && !feedback) finishNotice();
+    }
   } else if (!lastDraw || now - lastDraw >= 1000) {
     if (setupMode) {
       String label = setupSsid;
       while (label.length() < 12) label += ' ';
       drawLines((now / 5000) % 2 == 0 ? label + "Şifresiz    Wi-Fi kur" : "Tarayıcı:   192.168.4.1 Wi-Fi seç", 0);
     }
-    else drawLines(!queueHealthy ? "Depo hatası Seri monitör kontrol et" : WiFi.status() == WL_CONNECTED ? "Masa hazır  Notların    bekleniyor" : "Masa        Wi-Fi       bekleniyor", 0);
+    else drawIdle(now);
     lastDraw = now;
-  }
-  const int button = digitalRead(ACK_BUTTON_PIN);
-  if (button != lastButton) { lastButton = button; buttonChanged = now; }
-  if (now - buttonChanged >= 40) {
-    if (button == LOW && !pressed) { pressed = true; if (active) finishNotice(); }
-    if (button == LOW && now - buttonChanged >= 5000 && !setupMode) startSetup();
-    if (button == HIGH) pressed = false;
   }
   delay(2);
 }

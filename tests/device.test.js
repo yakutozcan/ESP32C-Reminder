@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSimulator } from '../tools/device-simulator.js';
 import { requestDevice, validateDevice } from '../src/core/device.js';
+import { ReminderEngine } from '../src/core/engine.js';
 const token = 'test-device-token-123456789';
 test('real HTTP delivery authenticates and deduplicates a repeated ID', async () => {
   const notices = [];
@@ -9,7 +10,7 @@ test('real HTTP delivery authenticates and deduplicates a repeated ID', async ()
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const device = validateDevice({ url: `http://127.0.0.1:${server.address().port}/`, token });
-    assert.equal((await requestDevice(device, '/api/health')).protocol, 2);
+    assert.equal((await requestDevice(device, '/api/health')).protocol, 4);
     const job = { id: 'one', title: 'Bitkileri sula', melody: 'chime' };
     assert.equal((await requestDevice(device, '/api/notify', job)).duplicate, false);
     assert.equal((await requestDevice(device, '/api/notify', job)).duplicate, true);
@@ -43,5 +44,31 @@ test('silent notifications remain silent and unsupported melodies are rejected',
     assert.equal(notices[0].melody, 'none');
     await assert.rejects(requestDevice(device, '/api/notify', { id: 'bad', title: 'Su iç', melody: 'unknown' }), /HTTP 400/);
     assert.equal(notices.length, 1);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('one-off and restarted snooze deliver separate stable IDs through the real HTTP protocol', async () => {
+  const notices = [];
+  const server = createSimulator({ token, onNotice: n => notices.push(n) });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    let now = new Date('2026-10-05T08:00:00').getTime();
+    let saved;
+    const options = { clock: () => now, persist: async state => { saved = state; return true; },
+      send: (device, job) => requestDevice(device, '/api/notify', job) };
+    const engine = new ReminderEngine(options);
+    await engine.setDevice({ url: `http://127.0.0.1:${server.address().port}`, token });
+    await engine.saveReminder({ title: 'Türkçe tek seferlik', frequency: 'once', onceDate: '2026-10-05', time: '09:00', melody: 'none' });
+    now = new Date('2026-10-05T09:00:00').getTime(); await engine.tick();
+    await engine.snoozeJob(engine.state.jobs[0].id, 5);
+    const restarted = new ReminderEngine({ ...options, state: saved });
+    await restarted.tick(); assert.equal(notices.length, 1);
+    now += 5 * 60000;
+    await restarted.tick(); await restarted.tick();
+    assert.equal(notices.length, 2);
+    assert.notEqual(notices[0].id, notices[1].id);
+    assert.equal(notices[1].title, 'Türkçe tek seferlik');
+    assert.equal(notices[1].melody, 'none');
+    assert.equal(restarted.state.jobs[1].status, 'delivered');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
